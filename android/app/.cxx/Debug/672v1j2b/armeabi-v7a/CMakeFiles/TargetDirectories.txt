@@ -1,0 +1,2 @@
+C:/Users/johns/Desktop/Coding/Web Applications/react_projects/ncdc-ccms-mobile-application/android/app/.cxx/Debug/672v1j2b/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/Users/johns/Desktop/Coding/Web Applications/react_projects/ncdc-ccms-mobile-application/android/app/.cxx/Debug/672v1j2b/armeabi-v7a/CMakeFiles/rebuild_cache.dir
