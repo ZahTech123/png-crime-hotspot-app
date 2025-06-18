@@ -13,7 +13,7 @@ class MapControls extends StatelessWidget {
   final bool canNavigateMarkers;
 
   const MapControls({
-    Key? key,
+    super.key,
     required this.onResetView,
     required this.onZoomIn,
     required this.onZoomOut,
@@ -24,7 +24,7 @@ class MapControls extends StatelessWidget {
     required this.onPreviousMarker,
     required this.onNextMarker,
     required this.canNavigateMarkers,
-  }) : super(key: key);
+  });
 
   // --- Helper Widget for Control Buttons (copied from map_screen.dart) ---
   Widget _buildControlButton(IconData icon, VoidCallback? onPressed, {String? tooltip}) {
@@ -32,13 +32,13 @@ class MapControls extends StatelessWidget {
     bool isDisabled = onPressed == null;
 
     return Material(
-      color: isDisabled ? Colors.grey.withOpacity(0.6) : Colors.white.withOpacity(0.9),
+      color: isDisabled ? Colors.grey.withAlpha((0.6 * 255).round()) : Colors.white.withAlpha((0.9 * 255).round()),
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
       elevation: isDisabled ? 0.0 : 4.0,
       child: IconButton(
         tooltip: tooltip,
-        icon: Icon(icon, color: isDisabled ? Colors.white.withOpacity(0.7) : Colors.black87),
+        icon: Icon(icon, color: isDisabled ? Colors.white.withAlpha((0.7 * 255).round()) : Colors.black87),
         onPressed: onPressed,
         padding: const EdgeInsets.all(10.0),
         constraints: const BoxConstraints(),

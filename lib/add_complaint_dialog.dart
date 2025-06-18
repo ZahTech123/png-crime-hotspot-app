@@ -3,6 +3,7 @@ import 'dart:typed_data'; // Needed for Uint8List for web preview
 import 'package:flutter/foundation.dart' show kIsWeb; // Import kIsWeb
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart'; // Import XFile
+import 'package:ncdc_ccms_app/utils/app_logger.dart';
 import 'package:uuid/uuid.dart'; // Revert back to standard import
 import '../models.dart'; // Adjusted import path
 import '../complaint_provider.dart'; // Adjusted import path
@@ -397,9 +398,9 @@ class _AddComplaintDialogState extends State<AddComplaintDialog> {
       try {
         // Upload images if any were selected
         if (_selectedImages.isNotEmpty) {
-          print('[_saveComplaint] Uploading ${_selectedImages.length} images...'); // Add log
+          appLogger.info('[_saveComplaint] Uploading ${_selectedImages.length} images...');
           imageUrls = await widget.imageService.uploadImages(_selectedImages, complaintId);
-          print('[_saveComplaint] Image URLs received: $imageUrls'); // Add log
+          appLogger.info('[_saveComplaint] Image URLs received: $imageUrls');
         }
 
         // Create complaint object with generated ID and image URLs
@@ -413,31 +414,31 @@ class _AddComplaintDialogState extends State<AddComplaintDialog> {
           priority: priority,
           directorate: directorate,
           dateSubmitted: DateTime.now(),
-          electorate: '', // TODO: Get electorate based on suburb?
-          currentHandler: '', // TODO: Set initial handler?
+          electorate: '', // TODO: [Future Improvement] Get electorate based on suburb (e.g., reverse geocoding or selection).
+          currentHandler: '', // TODO: [Future Improvement] Set initial handler based on rules or leave empty.
           previousHandler: null,
           previousHandlers: [],
           resolved: false,
-          latitude: 0.0, // TODO: Get location data?
-          longitude: 0.0, // TODO: Get location data?
-          name: '', // TODO: Get reporter name?
-          team: '', // TODO: Assign team based on directorate/issue?
-          submissionTime: DateTime.now(), // TODO: Fix time parsing if needed
+          latitude: 0.0, // TODO: [Future Improvement] Get location data (e.g., from device GPS).
+          longitude: 0.0, // TODO: [Future Improvement] Get location data (e.g., from device GPS).
+          name: '', // TODO: [Future Improvement] Get reporter name (e.g., from user profile).
+          team: '', // TODO: [Future Improvement] Assign team based on directorate/issue type.
+          submissionTime: DateTime.now(), // TODO: [Refinement] Ensure submissionTime is consistently handled, consider UTC.
           closedTime: null,
           lastUpdated: DateTime.now(),
           emailEscalation: false,
           escalationCount: 0,
           handlerStartDateAndTime: DateTime.now(),
           lastEscalated: null,
-          isNew: true, // TODO: Review isNew/isRead logic
+          isNew: true, // TODO: [Future Improvement] Review isNew/isRead logic based on application flow.
           isRead: false,
           imageUrls: imageUrls,
         );
         
-        print('[_saveComplaint] Adding complaint to provider...'); // Add log
+        appLogger.info('[_saveComplaint] Adding complaint to provider...');
         // Add complaint to the database via provider
         await widget.complaintProvider.addComplaint(newComplaint);
-        print('[_saveComplaint] Complaint added via provider.'); // Add log
+        appLogger.info('[_saveComplaint] Complaint added via provider.');
         
         // Use captured mounted state and context objects
         if (!isMounted) return;
@@ -447,12 +448,12 @@ class _AddComplaintDialogState extends State<AddComplaintDialog> {
           const SnackBar(content: Text('Complaint added successfully'))
         );
 
-      } catch (e) {
-         print('[_saveComplaint] Error saving complaint: $e'); // Log the error
+      } catch (e, s) {
+         appLogger.severe('[_saveComplaint] Error saving complaint', e, s);
          // Use captured mounted state and context objects
          if (!isMounted) return;
          messenger.showSnackBar( // Use captured messenger
-           SnackBar(content: Text('Error saving complaint: $e'))
+           SnackBar(content: Text('Error saving complaint: ${e.toString()}'))
          );
       } finally {
         // Use captured mounted state

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:ncdc_ccms_app/utils/app_logger.dart'; // Import appLogger
 
 // Helper function to fetch full details for a single complaint
 Future<Map<String, dynamic>?> _fetchComplaintDetails(String complaintId, BuildContext context) async {
   // No mounted check needed here as it's called from a context that should be mounted
-  print("Fetching details for complaint ID: $complaintId");
+  appLogger.fine("Fetching details for complaint ID: $complaintId");
   try {
     final supabase = Supabase.instance.client;
     final response = await supabase
@@ -13,10 +14,10 @@ Future<Map<String, dynamic>?> _fetchComplaintDetails(String complaintId, BuildCo
         .eq('id', complaintId)
         .single(); // Expect only one row
 
-    print("Successfully fetched details: ${response}");
+    appLogger.fine("Successfully fetched details: $response");
     return response; // Supabase returns a Map<String, dynamic>
-  } catch (e) {
-    print("Error fetching complaint details: $e");
+  } catch (e, stackTrace) {
+    appLogger.severe("Error fetching complaint details for ID: $complaintId", e, stackTrace);
     // Optionally show a snackbar error here too
     if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -30,7 +31,7 @@ Future<Map<String, dynamic>?> _fetchComplaintDetails(String complaintId, BuildCo
 class ComplaintDetailsSheet extends StatelessWidget {
   final String complaintId;
 
-  const ComplaintDetailsSheet({Key? key, required this.complaintId}) : super(key: key);
+  const ComplaintDetailsSheet({super.key, required this.complaintId});
 
   @override
   Widget build(BuildContext context) {

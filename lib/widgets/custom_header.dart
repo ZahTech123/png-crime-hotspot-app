@@ -5,10 +5,10 @@ class CustomHeader extends StatelessWidget implements PreferredSizeWidget {
   final List<Widget>? actions;
 
   const CustomHeader({
-    Key? key,
+    super.key,
     required this.title,
     this.actions,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

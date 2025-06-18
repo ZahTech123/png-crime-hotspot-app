@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
 import 'package:ncdc_ccms_app/map_screen/widgets/complaint_carousel.dart';
+import 'package:ncdc_ccms_app/utils/app_logger.dart';
 import 'package:ncdc_ccms_app/map_screen/widgets/complaint_details_sheet.dart';
 import 'package:ncdc_ccms_app/map_screen/widgets/map_controls.dart';
 import 'package:ncdc_ccms_app/map_screen/widgets/safe_mapbox_widget.dart';
@@ -158,9 +158,9 @@ class _MapScreenState extends State<MapScreen> {
     if (map != null && !_isDisposed) {
       try {
         map.style.getStyleURI();
-        debugPrint("Map operations interrupted before navigation");
-      } catch (e) {
-        debugPrint("Error interrupting map operations: $e");
+        appLogger.fine("Map operations interrupted before navigation");
+      } catch (e, s) {
+        appLogger.warning("Error interrupting map operations", e, s);
       }
     }
   }
@@ -168,13 +168,13 @@ class _MapScreenState extends State<MapScreen> {
   void _prepareForNavigation() {
     if (_isDisposed) return;
     _cancelMapOperations();
-    debugPrint("Map prepared for navigation");
+    appLogger.fine("Map prepared for navigation");
   }
 
   void _onMapCreated(mapbox.MapboxMap mapboxMap) async {
     if (_isDisposed || !mounted) return;
 
-    debugPrint("Map created callback received.");
+    appLogger.info("Map created callback received.");
     this.mapboxMap = mapboxMap;
 
     try {
@@ -187,10 +187,10 @@ class _MapScreenState extends State<MapScreen> {
         doubleTouchToZoomOutEnabled: true,
         quickZoomEnabled: true,
       ));
-      debugPrint("Gesture settings updated.");
-    } catch (e) {
+      appLogger.fine("Gesture settings updated.");
+    } catch (e, s) {
       if (mounted) {
-        debugPrint("Error updating gesture settings: $e");
+        appLogger.warning("Error updating gesture settings", e, s);
       }
     }
   }
@@ -198,10 +198,10 @@ class _MapScreenState extends State<MapScreen> {
   void _onStyleLoadedCallback(mapbox.StyleLoadedEventData data) async {
     if (_isDisposed || !mounted || mapboxMap == null) return;
 
-    debugPrint("Style loaded callback received.");
+    appLogger.info("Style loaded callback received.");
 
     try {
-      debugPrint("Configuring ornaments via map controller...");
+      appLogger.fine("Configuring ornaments via map controller...");
       await mapboxMap!.scaleBar.updateSettings(mapbox.ScaleBarSettings(
         position: mapbox.OrnamentPosition.BOTTOM_LEFT,
         marginLeft: 60.0,
@@ -231,14 +231,14 @@ class _MapScreenState extends State<MapScreen> {
         marginBottom: 2.0,
         marginRight: 0.0,
       ));
-      debugPrint("Ornament configuration attempt finished.");
+      appLogger.fine("Ornament configuration attempt finished.");
 
       await mapboxMap!.style
           .setStyleImportConfigProperty("basemap", "show3dObjects", true);
-      debugPrint("Set show3dObjects config property to true.");
-    } catch (e) {
+      appLogger.fine("Set show3dObjects config property to true.");
+    } catch (e, s) {
       if (mounted && !_isDisposed) {
-        debugPrint("ERROR configuring ornaments via controller: $e");
+        appLogger.severe("ERROR configuring ornaments via controller", e, s);
       }
     }
 
@@ -252,7 +252,7 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _fetchComplaintCoordinates() async {
     if (!mounted || _isDisposed) return;
 
-    debugPrint("Fetching complaint coordinates...");
+    appLogger.info("Fetching complaint coordinates...");
     setState(() {
       _isLoadingComplaints = true;
     });
@@ -274,17 +274,17 @@ class _MapScreenState extends State<MapScreen> {
           _isLoadingComplaints = false;
         });
       }
-      debugPrint(
+      appLogger.info(
           "Successfully fetched ${_complaintsData.length} complaint coordinates.");
 
       _addMarkers();
-    } catch (e) {
+    } catch (e, s) {
       if (mounted && !_isDisposed) {
-        debugPrint("Error fetching complaint coordinates: $e");
+        appLogger.severe("Error fetching complaint coordinates", e, s);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error fetching map data: $e')),
+          SnackBar(content: Text('Error fetching map data: ${e.toString()}')),
         );
-        debugPrint("Falling back to default initial camera view due to fetch error.");
+        appLogger.warning("Falling back to default initial camera view due to fetch error.");
         if (mapboxMap != null) {
           mapboxMap!.flyTo(_initialCameraOptions,
               mapbox.MapAnimationOptions(duration: 1500));
@@ -300,7 +300,7 @@ class _MapScreenState extends State<MapScreen> {
           !_isDisposed &&
           _complaintCoordinates.isEmpty &&
           !_isLoadingComplaints) {
-        debugPrint("Falling back to default initial camera view (no complaints found).");
+        appLogger.info("Falling back to default initial camera view (no complaints found).");
         if (mapboxMap != null) {
           mapboxMap!.flyTo(_initialCameraOptions,
               mapbox.MapAnimationOptions(duration: 1500));
@@ -314,21 +314,21 @@ class _MapScreenState extends State<MapScreen> {
         !mounted ||
         _isLoadingComplaints ||
         _complaintsData.isEmpty) {
-      debugPrint("Add markers skipped: Disposed, not mounted, loading, or no data.");
+      appLogger.fine("Add markers skipped: Disposed, not mounted, loading, or no data.");
       return;
     }
     final mapController = mapboxMap;
     if (mapController == null) {
-      debugPrint("Add markers skipped: Map controller null.");
+      appLogger.warning("Add markers skipped: Map controller null.");
       return;
     }
-    debugPrint("Adding markers from fetched data...");
+    appLogger.info("Adding markers from fetched data...");
 
     try {
-      debugPrint("Loading marker image asset...");
+      appLogger.fine("Loading marker image asset...");
       final ByteData bytes = await rootBundle.load('assets/map-point.png');
       final Uint8List imageData = bytes.buffer.asUint8List();
-      debugPrint("Marker image loaded successfully.");
+      appLogger.fine("Marker image loaded successfully.");
 
       if (_isDisposed || !mounted) return;
       _pointAnnotationManager ??=
@@ -337,7 +337,7 @@ class _MapScreenState extends State<MapScreen> {
           _AnnotationClickListener(onTap: _onMarkerTapped));
 
       if (_pointAnnotationManager == null) {
-        debugPrint("ERROR: _pointAnnotationManager is null after creation attempt.");
+        appLogger.severe("ERROR: _pointAnnotationManager is null after creation attempt.");
         if (mapboxMap != null) {
           mapboxMap!.flyTo(_initialCameraOptions,
               mapbox.MapAnimationOptions(duration: 1500));
@@ -353,9 +353,9 @@ class _MapScreenState extends State<MapScreen> {
         _annotationIdToComplaintId.clear();
         _complaintIdToDataIndex.clear();
       });
-      debugPrint("Existing markers and coordinates cleared.");
+      appLogger.fine("Existing markers and coordinates cleared.");
 
-      debugPrint("Preparing marker data in background isolate...");
+      appLogger.fine("Preparing marker data in background isolate...");
       final preparedData =
           await compute<Map<String, dynamic>, _PreparedAnnotationData>(
         _prepareAnnotationOptions,
@@ -365,7 +365,7 @@ class _MapScreenState extends State<MapScreen> {
           'initialIconSize': _initialIconSize,
         },
       );
-      debugPrint("Marker data preparation complete.");
+      appLogger.fine("Marker data preparation complete.");
 
       if (!mounted || _isDisposed) return;
 
@@ -374,9 +374,9 @@ class _MapScreenState extends State<MapScreen> {
       final optionIndexToComplaintId = preparedData.optionIndexToComplaintId;
 
       if (allOptions.isEmpty) {
-        debugPrint("No valid marker options generated from fetched data.");
+        appLogger.warning("No valid marker options generated from fetched data.");
         if (mounted && !_isDisposed) {
-          debugPrint("Falling back to default initial camera view (no valid markers).");
+          appLogger.info("Falling back to default initial camera view (no valid markers).");
           if (mapboxMap != null) {
             mapboxMap!.flyTo(_initialCameraOptions,
                 mapbox.MapAnimationOptions(duration: 1500));
@@ -397,7 +397,7 @@ class _MapScreenState extends State<MapScreen> {
         final end = (i + batchSize > totalAnnotations) ? totalAnnotations : i + batchSize;
         final batchOptions = allOptions.sublist(i, end);
         
-        debugPrint("Creating annotation batch ${i ~/ batchSize + 1} with ${batchOptions.length} markers...");
+        appLogger.fine("Creating annotation batch ${i ~/ batchSize + 1} with ${batchOptions.length} markers...");
 
         final List<mapbox.PointAnnotation?> createdBatch =
             await _pointAnnotationManager!.createMulti(batchOptions);
@@ -413,7 +413,7 @@ class _MapScreenState extends State<MapScreen> {
                 final complaintId = optionIndexToComplaintId[originalIndex]!;
                 newAnnotationIdMap[annotation.id] = complaintId;
             } else {
-                debugPrint("Warning: Could not find original option index or complaint ID for annotation ${annotation.id}");
+                appLogger.warning("Warning: Could not find original option index or complaint ID for annotation ${annotation.id}");
             }
         }
         
@@ -433,7 +433,7 @@ class _MapScreenState extends State<MapScreen> {
         _updateAnnotationSize(_currentZoom, forceUpdate: true);
 
         if (_complaintCoordinates.isNotEmpty) {
-          debugPrint("Markers added, setting initial view to fit bounds...");
+          appLogger.fine("Markers added, setting initial view to fit bounds...");
           Future.delayed(const Duration(milliseconds: 100), () {
             if (!_isDisposed && mounted) {
               _resetCameraView();
@@ -443,22 +443,24 @@ class _MapScreenState extends State<MapScreen> {
       }
 
       if (!mounted || _isDisposed) {
-        debugPrint("Widget disposed after adding markers.");
+        appLogger.info("Widget disposed after adding markers.");
         return;
       }
-      debugPrint(
+      appLogger.info(
           "SUCCESS: ${newCurrentAnnotations.length} markers added from Supabase data.");
-    } catch (e) {
+    } catch (e, s) {
       if (mounted && !_isDisposed) {
-        debugPrint("ERROR adding markers: $e");
+        appLogger.severe("ERROR adding markers", e, s);
       } else {
-        debugPrint("Error adding markers occurred, but widget was disposed: $e");
+        appLogger.warning("Error adding markers occurred, but widget was disposed", e, s);
       }
     }
   }
 
   Future<void> _zoomIn() async {
-    if (_isDisposed || !mounted || mapboxMap == null) return;
+    if (_isDisposed || !mounted || mapboxMap == null) {
+      return;
+    }
     try {
       final currentCamera = await mapboxMap!.getCameraState();
       await mapboxMap!.flyTo(
@@ -470,8 +472,8 @@ class _MapScreenState extends State<MapScreen> {
         ),
         mapbox.MapAnimationOptions(duration: 800),
       );
-    } catch (e) {
-      if (mounted && !_isDisposed) debugPrint("Error zooming in: $e");
+    } catch (e, s) {
+      if (mounted && !_isDisposed) appLogger.warning("Error zooming in", e, s);
     }
   }
 
@@ -488,8 +490,8 @@ class _MapScreenState extends State<MapScreen> {
         ),
         mapbox.MapAnimationOptions(duration: 800),
       );
-    } catch (e) {
-      if (mounted && !_isDisposed) debugPrint("Error zooming out: $e");
+    } catch (e, s) {
+      if (mounted && !_isDisposed) appLogger.warning("Error zooming out", e, s);
     }
   }
 
@@ -506,8 +508,8 @@ class _MapScreenState extends State<MapScreen> {
         ),
         mapbox.MapAnimationOptions(duration: 1000),
       );
-    } catch (e) {
-      if (mounted && !_isDisposed) debugPrint("Error rotating left: $e");
+    } catch (e, s) {
+      if (mounted && !_isDisposed) appLogger.warning("Error rotating left", e, s);
     }
   }
 
@@ -524,8 +526,8 @@ class _MapScreenState extends State<MapScreen> {
         ),
         mapbox.MapAnimationOptions(duration: 1000),
       );
-    } catch (e) {
-      if (mounted && !_isDisposed) debugPrint("Error rotating right: $e");
+    } catch (e, s) {
+      if (mounted && !_isDisposed) appLogger.warning("Error rotating right", e, s);
     }
   }
 
@@ -549,8 +551,8 @@ class _MapScreenState extends State<MapScreen> {
         ),
         mapbox.MapAnimationOptions(duration: 1000),
       );
-    } catch (e) {
-      if (mounted && !_isDisposed) debugPrint("Error increasing pitch: $e");
+    } catch (e, s) {
+      if (mounted && !_isDisposed) appLogger.warning("Error increasing pitch", e, s);
     }
   }
 
@@ -575,8 +577,8 @@ class _MapScreenState extends State<MapScreen> {
         ),
         mapbox.MapAnimationOptions(duration: 1000),
       );
-    } catch (e) {
-      if (mounted && !_isDisposed) debugPrint("Error decreasing pitch: $e");
+    } catch (e, s) {
+      if (mounted && !_isDisposed) appLogger.warning("Error decreasing pitch", e, s);
     }
   }
 
@@ -588,12 +590,12 @@ class _MapScreenState extends State<MapScreen> {
         _complaintCoordinates.isEmpty) return;
 
     if (index < 0 || index >= _complaintCoordinates.length) {
-      debugPrint("Fly to coordinate skipped: Invalid index $index");
+      appLogger.warning("Fly to coordinate skipped: Invalid index $index");
       return;
     }
 
     final targetCoordinate = _complaintCoordinates[index];
-    debugPrint(
+    appLogger.fine(
         "Flying to marker index $index: ${targetCoordinate.lat}, ${targetCoordinate.lng}");
 
     mapbox.PointAnnotation? targetAnnotation;
@@ -667,9 +669,9 @@ class _MapScreenState extends State<MapScreen> {
           _currentMarkerIndex = index;
         });
       }
-    } catch (e) {
+    } catch (e, s) {
       if (mounted && !_isDisposed) {
-        debugPrint("Error flying to coordinate: $e");
+        appLogger.warning("Error flying to coordinate", e, s);
       }
     }
   }
@@ -694,14 +696,14 @@ class _MapScreenState extends State<MapScreen> {
 
     final complaintId = _annotationIdToComplaintId[annotation.id];
     if (complaintId == null) {
-      debugPrint("Error: Tapped marker has no corresponding complaint ID.");
+      appLogger.severe("Error: Tapped marker has no corresponding complaint ID. Annotation ID: ${annotation.id}");
       return;
     }
 
     final index = _complaintIdToDataIndex[complaintId];
 
     if (index != null) {
-      debugPrint("Marker tapped, complaint index is $index");
+      appLogger.fine("Marker tapped, complaint index is $index");
       setState(() {
         _selectedComplaintIndex = index;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -721,7 +723,7 @@ class _MapScreenState extends State<MapScreen> {
     if (_isDisposed || !mounted || _pointAnnotationManager == null) return;
 
     if (_bouncingAnnotationIds.contains(annotation.id)) {
-      debugPrint("Skipping bounce for ${annotation.id}: already bouncing.");
+      appLogger.finer("Skipping bounce for ${annotation.id}: already bouncing.");
       return;
     }
 
@@ -749,14 +751,14 @@ class _MapScreenState extends State<MapScreen> {
 
       final annotationIndex =
           _currentAnnotations.indexWhere((a) => a.id == annotation.id);
-      if (annotationIndex != -1) {
+      if (annotationIndex != -1 && mounted && !_isDisposed) {
         setState(() {
           _currentAnnotations[annotationIndex] = originalAnnotation;
         });
       }
-    } catch (e) {
+    } catch (e, s) {
       if (mounted && !_isDisposed) {
-        debugPrint("Error during marker bounce animation: $e");
+        appLogger.warning("Error during marker bounce animation", e, s);
       }
     } finally {
       _bouncingAnnotationIds.remove(annotation.id);
@@ -791,20 +793,26 @@ class _MapScreenState extends State<MapScreen> {
       if (_isDisposed ||
           !mounted ||
           _pointAnnotationManager == null ||
-          _currentAnnotations.isEmpty) return;
+          _currentAnnotations.isEmpty) {
+        return;
+      }
 
       try {
         final cameraState = await mapboxMap?.getCameraState();
-        if (cameraState == null || _isDisposed || !mounted) return;
+        if (cameraState == null || _isDisposed || !mounted) {
+          return;
+        }
         final newZoom = cameraState.zoom;
 
         if ((newZoom - _currentZoom).abs() < 0.1 &&
-            _currentAnnotations.first.iconSize != null) return;
+            _currentAnnotations.first.iconSize != null) {
+          return;
+        }
 
         _updateAnnotationSize(newZoom);
-      } catch (e) {
+      } catch (e, s) {
         if (mounted && !_isDisposed) {
-          debugPrint("Error in _onCameraChanged during size update: $e");
+          appLogger.warning("Error in _onCameraChanged during size update", e, s);
         }
       }
     });
@@ -815,7 +823,9 @@ class _MapScreenState extends State<MapScreen> {
     if (_isDisposed ||
         !mounted ||
         _pointAnnotationManager == null ||
-        _currentAnnotations.isEmpty) return;
+        _currentAnnotations.isEmpty) {
+      return;
+    }
 
     final newSize = _calculateIconSize(newZoom);
 
@@ -824,7 +834,7 @@ class _MapScreenState extends State<MapScreen> {
       return;
     }
 
-    debugPrint("Updating annotation size for zoom $newZoom to $newSize");
+    appLogger.finer("Updating annotation size for zoom $newZoom to $newSize");
     _currentZoom = newZoom;
 
     List<mapbox.PointAnnotation> updatedAnnotations = [];
@@ -853,9 +863,9 @@ class _MapScreenState extends State<MapScreen> {
           _currentAnnotations = updatedAnnotations;
         });
       }
-    } catch (e) {
+    } catch (e, s) {
       if (mounted && !_isDisposed) {
-        debugPrint("Error updating annotation sizes: $e");
+        appLogger.warning("Error updating annotation sizes", e, s);
       }
     }
   }
@@ -875,7 +885,9 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _resetCameraView() async {
-    if (_isDisposed || !mounted || mapboxMap == null) return;
+    if (_isDisposed || !mounted || mapboxMap == null) {
+      return;
+    }
 
     if (_selectedComplaintIndex != null) {
       setState(() {
@@ -884,21 +896,21 @@ class _MapScreenState extends State<MapScreen> {
     }
 
     if (_complaintCoordinates.isEmpty) {
-      debugPrint("Resetting camera view to default (no coordinates)...");
+      appLogger.info("Resetting camera view to default (no coordinates)...");
       try {
         await mapboxMap!.flyTo(
           _initialCameraOptions,
           mapbox.MapAnimationOptions(duration: 1500),
         );
-      } catch (e) {
+      } catch (e, s) {
         if (mounted && !_isDisposed) {
-          debugPrint("Error resetting camera view: $e");
+          appLogger.warning("Error resetting camera view", e, s);
         }
       }
       return;
     }
 
-    debugPrint("Calculating bounds to fit all markers...");
+    appLogger.fine("Calculating bounds to fit all markers...");
     try {
       List<Map<String?, Object?>> points = _complaintCoordinates
           .map((pos) => mapbox.Point(coordinates: pos).toJson())
@@ -913,21 +925,21 @@ class _MapScreenState extends State<MapScreen> {
         null, // pitch
       );
 
-      debugPrint("Resetting camera view to fit all markers...");
+      appLogger.fine("Resetting camera view to fit all markers...");
       await mapboxMap!.flyTo(
         cameraOptions,
         mapbox.MapAnimationOptions(duration: 1500),
       );
-    } catch (e) {
+    } catch (e, s) {
       if (mounted && !_isDisposed) {
-        debugPrint("Error calculating or flying to bounds: $e");
+        appLogger.warning("Error calculating or flying to bounds", e, s);
       }
     }
   }
 
   @override
   void dispose() {
-    debugPrint("Disposing MapScreen");
+    appLogger.info("Disposing MapScreen");
     _debounceTimer?.cancel();
     _pageController?.dispose();
     _isDisposed = true;
@@ -936,9 +948,9 @@ class _MapScreenState extends State<MapScreen> {
     if (manager != null) {
       try {
         mapboxMap?.annotations.removeAnnotationManager(manager);
-        debugPrint("PointAnnotationManager cleaned up.");
-      } catch (e) {
-        debugPrint("Error cleaning up PointAnnotationManager: $e");
+        appLogger.fine("PointAnnotationManager cleaned up.");
+      } catch (e, s) {
+        appLogger.warning("Error cleaning up PointAnnotationManager", e, s);
       }
       _pointAnnotationManager = null;
     }
@@ -949,24 +961,33 @@ class _MapScreenState extends State<MapScreen> {
     try {
       if (map != null) {
         map.dispose();
-        debugPrint("MapboxMap successfully disposed");
+        appLogger.fine("MapboxMap successfully disposed");
       } else {
-        debugPrint("No MapboxMap instance to dispose");
+        appLogger.fine("No MapboxMap instance to dispose");
       }
-    } catch (e) {
-      debugPrint("Error during MapboxMap disposal: $e");
+    } catch (e, s) {
+      appLogger.warning("Error during MapboxMap disposal", e, s);
     }
 
     super.dispose();
-    debugPrint("MapScreen fully disposed");
+    appLogger.info("MapScreen fully disposed");
   }
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: true, // Or a function like: () => _canPopNow(),
+      onPopInvoked: (didPop) async {
+        if (didPop) {
+          return;
+        }
         _prepareForNavigation();
-        return true;
+        // If you need to conditionally prevent popping, you'd manage `canPop`
+        // and call Navigator.pop(context) yourself when ready.
+        // For this case, as onWillPop returned true, we assume it can always pop after preparation.
+        if (mounted) {
+          Navigator.pop(context);
+        }
       },
       child: _buildContent(context),
     );

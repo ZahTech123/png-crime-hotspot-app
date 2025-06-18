@@ -1,7 +1,16 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:ncdc_ccms_app/models.dart';
+import 'package:ncdc_ccms_app/utils/app_logger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+// Custom Exception
+class ComplaintServiceException implements Exception {
+  final String message;
+  ComplaintServiceException(this.message);
+  @override
+  String toString() => 'ComplaintServiceException: $message';
+}
 
 // Top-level function for background isolate parsing
 List<CityComplaint> _parseComplaints(String responseBody) {
@@ -23,10 +32,17 @@ class ComplaintService {
         .map((listOfMaps) {
           try {
             return listOfMaps.map((map) => CityComplaint.fromJson(map)).toList();
-          } catch (e) {
-            // In a real app, use a proper logger
-            return <CityComplaint>[];
+          } catch (e, s) {
+            appLogger.severe('Error in complaints stream processing', e, s);
+            // Consider if Stream.error(ComplaintServiceException('Error processing complaints')) is better
+            return <CityComplaint>[]; // Or Stream.value([])
           }
+        })
+        .handleError((e, s) { // Catch errors from the stream source itself
+          appLogger.severe('Error fetching complaints stream source', e, s);
+          // Depending on how the UI consumes this, Stream.error might be better.
+          // For now, returning an empty list to prevent app crash if UI expects a list.
+          return <CityComplaint>[];
         });
   }
 
@@ -59,8 +75,9 @@ class ComplaintService {
 
       final jsonString = json.encode(response);
       return await compute(_parseComplaints, jsonString);
-    } catch (e) {
-      throw Exception('Failed to load complaints: $e');
+    } catch (e, s) {
+      appLogger.severe('Failed to load complaints', e, s);
+      throw ComplaintServiceException('Failed to load complaints. Please try again later.');
     }
   }
 
@@ -75,8 +92,9 @@ class ComplaintService {
 
       final jsonString = json.encode(response);
       return await compute(_parseComplaints, jsonString);
-    } catch (e) {
-      throw Exception('Failed to load complaints by location: $e');
+    } catch (e, s) {
+      appLogger.severe('Failed to load complaints by location', e, s);
+      throw ComplaintServiceException('Failed to load complaints by location. Please try again later.');
     }
   }
 

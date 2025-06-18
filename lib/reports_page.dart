@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:intl/intl.dart';
+// import 'package:intl/intl.dart'; // Unused
 
 import 'complaint_provider.dart';
 import 'models.dart';
 import 'utils/responsive.dart';
-import 'complaints/complaint_card.dart';
+// import 'complaints/complaint_card.dart'; // Unused
 
 class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
@@ -36,15 +36,6 @@ class _ReportsPageState extends State<ReportsPage> {
       'Medium': counts['Medium']!,
       'Low': counts['Low']!,
     };
-  }
-
-  Map<String, int> _getComplaintCountsByDirectorate(List<CityComplaint> complaints) {
-    Map<String, int> counts = {};
-    for (var complaint in complaints) {
-       counts.update(complaint.directorate ?? 'Unknown', (value) => value + 1, ifAbsent: () => 1);
-    }
-     var sortedEntries = counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-     return Map.fromEntries(sortedEntries);
   }
 
   Widget _buildKPIs(List<CityComplaint> complaints) {

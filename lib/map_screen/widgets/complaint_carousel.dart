@@ -10,19 +10,19 @@ class ComplaintCarousel extends StatefulWidget {
   final PageController pageController;
 
   const ComplaintCarousel({
-    Key? key,
+    super.key,
     required this.complaintsData,
     required this.onPageChanged,
     required this.onShowDetails,
     required this.onClose,
     required this.pageController,
-  }) : super(key: key);
+  });
 
   @override
-  _ComplaintCarouselState createState() => _ComplaintCarouselState();
+  State<ComplaintCarousel> createState() => ComplaintCarouselState();
 }
 
-class _ComplaintCarouselState extends State<ComplaintCarousel> {
+class ComplaintCarouselState extends State<ComplaintCarousel> {
   @override
   Widget build(BuildContext context) {
     return Positioned(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ncdc_ccms_app/utils/app_logger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'city_data_dashboard.dart'; // Navigate here after login
 
@@ -43,18 +44,30 @@ class _LoginPageState extends State<LoginPage> {
           MaterialPageRoute(builder: (context) => const CityDataDashboard()),
         );
       } else {
-         setState(() {
-           _errorMessage = 'Login failed. Please check your credentials.';
-         });
+         appLogger.warning('Login failed: No user object in response.');
+         if (mounted) {
+           setState(() {
+             _errorMessage = 'Login failed. Please check your credentials.';
+             _isLoading = false;
+           });
+         }
       }
-    } on AuthException catch (e) {
-       setState(() {
-        _errorMessage = e.message;
-       });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'An unexpected error occurred: ${e.toString()}';
-      });
+    } on AuthException catch (e, s) {
+      appLogger.warning('Authentication failed', e, s);
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Login failed: ${e.message}';
+          _isLoading = false;
+        });
+      }
+    } catch (e, s) {
+      appLogger.severe('Unexpected login error', e, s);
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'An unexpected error occurred. Please try again.';
+          _isLoading = false;
+        });
+      }
     } finally {
       if (mounted) {
          setState(() {

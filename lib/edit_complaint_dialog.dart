@@ -1,9 +1,9 @@
 import 'dart:io'; // Needed for File type in previews
-import 'dart:typed_data'; // Needed for Uint8List for web preview
-import 'package:flutter/foundation.dart'; // Import for kIsWeb and debugPrint
+import 'package:flutter/foundation.dart'; // Import for kIsWeb
 import 'package:supabase_flutter/supabase_flutter.dart'; // Import Supabase
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart'; // Import XFile
+import 'package:ncdc_ccms_app/utils/app_logger.dart';
 import 'models.dart';
 import 'complaint_provider.dart';
 import 'image_service.dart';
@@ -71,13 +71,13 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
         });
       } else {
         // User canceled the picker
-        debugPrint('User canceled file picking');
+        appLogger.fine('User canceled file picking');
       }
-    } catch (e) {
-      debugPrint('Error picking files: $e');
+    } catch (e, s) {
+      appLogger.severe('Error picking files', e, s);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error picking files: $e'))
+        SnackBar(content: Text('Error picking files: ${e.toString()}'))
       );
     }
   }
@@ -94,10 +94,11 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
           _mainImageMarkedForRemoval = false; // Reset removal flag if new photo is taken
         });
       }
-    } catch (e) {
+    } catch (e, s) {
+      appLogger.severe('Error taking photo', e, s);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error taking photo: $e'))
+        SnackBar(content: Text('Error taking photo: ${e.toString()}'))
       );
     }
   }
@@ -129,6 +130,8 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
     // Determine if we should *show* the main image (considering removal flag)
     final bool showMainImage = !_mainImageMarkedForRemoval;
     final String? effectiveMainImageUrl = showMainImage ? existingMainImageUrl : null;
+
+    appLogger.finest('Building EditComplaintDialog. EffectiveMainImageUrl: $effectiveMainImageUrl, _mainImageToUpload: ${_mainImageToUpload?.path}');
 
     return Form(
       key: formKey,
@@ -404,15 +407,14 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
         imageWidget = Image.file(File(_mainImageToUpload!.path), fit: BoxFit.cover);
       }
     } else { // Must be existingImageUrl
-      debugPrint('[_buildMainImagePreview ComplaintID: ${widget.complaint.id}] Trying to load existing URL: $existingImageUrl');
+      appLogger.finer('[_buildMainImagePreview ComplaintID: ${widget.complaint.id}] Trying to load existing URL: $existingImageUrl');
       imageWidget = Image.network(
         existingImageUrl!, // We already checked it's not null
         fit: BoxFit.cover,
         loadingBuilder: (context, child, progress) =>
             progress == null ? child : const Center(child: CircularProgressIndicator()),
         errorBuilder: (context, error, stackTrace) {
-          debugPrint('[_buildMainImagePreview ComplaintID: ${widget.complaint.id}] ERROR loading existing image $existingImageUrl: $error');
-          debugPrint(stackTrace.toString());
+          appLogger.severe('[_buildMainImagePreview ComplaintID: ${widget.complaint.id}] ERROR loading existing image $existingImageUrl', error, stackTrace);
           return const Center(child: Icon(Icons.broken_image_outlined, size: 50, color: Colors.grey));
         },
       );
@@ -439,7 +441,7 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
             },
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
+                color: Colors.black.withAlpha((0.6 * 255).round()),
                 shape: BoxShape.circle,
               ),
               padding: const EdgeInsets.all(4.0),
@@ -463,14 +465,13 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
     if (isExistingUrl) {
       // Assume existing URLs are images
       final String url = attachmentItem as String;
-      debugPrint('[_buildAttachmentPreviewTile ComplaintID: ${widget.complaint.id}] Trying to load existing attachment URL: $url');
+      appLogger.finer('[_buildAttachmentPreviewTile ComplaintID: ${widget.complaint.id}] Trying to load existing attachment URL: $url');
       contentWidget = Image.network(
         url,
         height: 100, width: 100, fit: BoxFit.cover,
         loadingBuilder: (context, child, progress) => progress == null ? child : Container(width: 100, height: 100, color: Colors.grey[300], child: const Center(child: CircularProgressIndicator())),
         errorBuilder: (ctx, err, st) {
-           debugPrint('[_buildAttachmentPreviewTile ComplaintID: ${widget.complaint.id}] ERROR loading attachment image $url: $err');
-           debugPrint(st.toString());
+           appLogger.warning('[_buildAttachmentPreviewTile ComplaintID: ${widget.complaint.id}] ERROR loading attachment image $url', err, st);
            return Container(width: 100, height: 100, color: Colors.grey[300], child: const Center(child: Icon(Icons.error_outline)));
         },
       );
@@ -525,7 +526,7 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
             child: InkWell(
               onTap: _isUploading ? null : onRemove,
               child: Container(
-                decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: Colors.black.withAlpha((0.6 * 255).round()), shape: BoxShape.circle),
                 padding: const EdgeInsets.all(2.0),
                 child: const Icon(Icons.close, color: Colors.white, size: 14),
               ),
@@ -542,6 +543,11 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
     }
 
     setState(() { _isUploading = true; });
+
+    // Store context-dependent objects BEFORE async gaps
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final bool isMounted = mounted; // Capture mounted state
 
     // --- File Collection (Separated) ---
     // Attachments from file picker
@@ -567,9 +573,9 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
     try {
       // --- 1. Upload Main Complaint Image (if changed) ---
       if (tempMainImageToUpload != null) { // Use the temp variable captured before clearing state
-        debugPrint('Preparing main image for upload: ${tempMainImageToUpload.path}');
+        appLogger.info('Preparing main image for upload: ${tempMainImageToUpload.path}');
         final originalFileName = tempMainImageToUpload.name;
-        debugPrint('Original main image filename from picker: $originalFileName');
+        appLogger.finer('Original main image filename from picker: $originalFileName');
 
         final fileBytes = await tempMainImageToUpload.readAsBytes();
         final fileSize = fileBytes.length;
@@ -583,7 +589,7 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
         final uniqueFileName = 'main_${timestamp}$fileExtension'; // Simple name: main_123456789.jpg
         final uniqueComplaintImagePath = '${widget.complaint.id}/$uniqueFileName'; // Path: complaintId/main_123456789.jpg
 
-        debugPrint('Uploading main image to complaintimages: $uniqueFileName ($mimeType, $fileSize bytes) to $uniqueComplaintImagePath');
+        appLogger.info('Uploading main image to complaintimages: $uniqueFileName ($mimeType, $fileSize bytes) to $uniqueComplaintImagePath');
 
         // Upload to complaintimages bucket
         await supabase.storage
@@ -602,9 +608,9 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
         newMainImageUrl = supabase.storage
             .from('complaintimages') 
             .getPublicUrl(sanitizedPathForUrl); // Use the simplified path
-        debugPrint('Got Public URL for main image: $newMainImageUrl (from path: $sanitizedPathForUrl)');
+        appLogger.info('Got Public URL for main image: $newMainImageUrl (from path: $sanitizedPathForUrl)');
       } else {
-         debugPrint('No new main image selected.');
+         appLogger.fine('No new main image selected.');
       }
 
       // --- 2. Handle Deletion of Existing Main Image (if marked) ---
@@ -623,25 +629,25 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
                   final imagePath = pathSegments.sublist(4).join('/'); // e.g., 'complaintId/filename.jpg'
 
                   if (bucketName == 'complaintimages' && imagePath.isNotEmpty) {
-                       debugPrint('Attempting to remove existing main image from storage: $imagePath');
+                       appLogger.info('Attempting to remove existing main image from storage: $imagePath');
                        await supabase.storage.from(bucketName).remove([imagePath]);
-                       debugPrint('Successfully removed existing main image from storage.');
+                       appLogger.info('Successfully removed existing main image from storage.');
                        removedExistingMainImage = true; // Flag that we successfully deleted it
                   } else {
-                     debugPrint('Could not extract valid path from URL for deletion: $existingImageUrl');
+                     appLogger.warning('Could not extract valid path from URL for deletion: $existingImageUrl');
                   }
               } else {
-                   debugPrint('Could not parse storage path from URL: $existingImageUrl');
+                   appLogger.warning('Could not parse storage path from URL: $existingImageUrl');
               }
-          } catch (e) {
-             debugPrint('Error attempting to remove existing main image from storage: $e');
+          } catch (e, s) {
+             appLogger.warning('Error attempting to remove existing main image from storage', e, s);
              // Decide if you want to proceed or show an error. Maybe log and continue.
           }
       }
 
       // --- 3. Upload Attachments (if any) ---
       if (attachmentFiles.isNotEmpty) {
-        debugPrint('Starting upload process for ${attachmentFiles.length} attachments...');
+        appLogger.info('Starting upload process for ${attachmentFiles.length} attachments...');
         for (var file in attachmentFiles) {
           String fileName;
           Uint8List fileBytes;
@@ -666,7 +672,7 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
           }
           mimeType = lookupMimeType(fileName, headerBytes: fileBytes.sublist(0, kIsWeb ? (fileBytes.length > 1024 ? 1024 : fileBytes.length) : 1024)) ?? 'application/octet-stream';
 
-          debugPrint('Uploading attachment to attachments: $fileName ($mimeType, $fileSize bytes) to $uniqueAttachmentPath');
+          appLogger.info('Uploading attachment to attachments: $fileName ($mimeType, $fileSize bytes) to $uniqueAttachmentPath');
 
           // Upload to attachments bucket
           await supabase.storage
@@ -685,7 +691,7 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
           final attachmentPublicUrl = supabase.storage
               .from('attachments') // <--- Get URL from attachments bucket
               .getPublicUrl(sanitizedAttachmentPathForUrl); // <-- Use sanitized path
-          debugPrint('Got Public URL for attachment: $attachmentPublicUrl (from path: $sanitizedAttachmentPathForUrl)');
+          appLogger.info('Got Public URL for attachment: $attachmentPublicUrl (from path: $sanitizedAttachmentPathForUrl)');
 
           // Prepare metadata for attachmentsData field
           newAttachmentMetadata.add({
@@ -696,10 +702,10 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
             'uploaded_at': DateTime.now().toIso8601String(),
             'public_url': attachmentPublicUrl, // Store public URL in metadata
           });
-          debugPrint('Prepared metadata for attachment $fileName');
+          appLogger.fine('Prepared metadata for attachment $fileName');
         }
       } else {
-         debugPrint('No new attachments selected for upload.');
+         appLogger.fine('No new attachments selected for upload.');
       }
 
       // --- Prepare final data for update ---
@@ -716,7 +722,7 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
           // Marked for removal, but deletion failed or wasn't attempted, KEEP existing URL?
           // Or maybe still remove it from the DB record even if storage failed? Let's remove it.
           finalImageUrls = []; // Or null
-           debugPrint('Warning: Main image marked for removal, but storage deletion might have failed. Removing URL from record anyway.');
+           appLogger.warning('Warning: Main image marked for removal, but storage deletion might have failed. Removing URL from record anyway.');
       } else {
           // No new image, not marked for removal, keep existing
           finalImageUrls = widget.complaint.imageUrls;
@@ -741,44 +747,43 @@ class _EditComplaintDialogState extends State<EditComplaintDialog> {
         imageUrls: finalImageUrls, // Update main image URL(s) based on upload/removal
       );
 
-      debugPrint('[_updateComplaint] Updating complaint details (imageUrls and attachmentsData) in provider...');
+      appLogger.info('[_updateComplaint] Updating complaint details (imageUrls and attachmentsData) in provider...');
       await widget.complaintProvider.updateComplaint(updatedComplaint);
-      debugPrint('[_updateComplaint] Complaint update request sent.');
+      appLogger.info('[_updateComplaint] Complaint update request sent.');
 
-      if (!mounted) return;
-      Navigator.of(context).pop(); // Close the dialog
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!isMounted) return; // Use captured isMounted
+      navigator.pop(); // Close the dialog
+      messenger.showSnackBar(
        SnackBar(content: Text('Complaint updated successfully${(tempMainImageToUpload != null || attachmentFiles.isNotEmpty) ? " with uploads" : ""}!'))
       );
 
-    } catch (e, stackTrace) {
-       debugPrint('[_updateComplaint] Error during update/upload: $e');
-       debugPrint('[_updateComplaint] StackTrace: $stackTrace');
+    } catch (e, s) {
+       appLogger.severe('[_updateComplaint] Error during update/upload', e, s);
        // Attempt to delete newly uploaded files if DB update fails
        if (uploadedComplaintImagePaths.isNotEmpty) {
          try {
-           debugPrint('Attempting to rollback complaintimages uploads...');
+           appLogger.info('Attempting to rollback complaintimages uploads...');
            await supabase.storage.from('complaintimages').remove(uploadedComplaintImagePaths);
-           debugPrint('Rollback successful for complaintimages paths: $uploadedComplaintImagePaths');
-         } catch (rollbackError) {
-           debugPrint('Error during complaintimages storage rollback: $rollbackError');
+           appLogger.info('Rollback successful for complaintimages paths: $uploadedComplaintImagePaths');
+         } catch (rollbackError, rs) {
+           appLogger.severe('Error during complaintimages storage rollback', rollbackError, rs);
          }
        }
        if (uploadedAttachmentPaths.isNotEmpty) {
          try {
-           debugPrint('Attempting to rollback attachments uploads...');
+           appLogger.info('Attempting to rollback attachments uploads...');
            await supabase.storage.from('attachments').remove(uploadedAttachmentPaths);
-           debugPrint('Rollback successful for attachments paths: $uploadedAttachmentPaths');
-         } catch (rollbackError) {
-           debugPrint('Error during attachments storage rollback: $rollbackError');
+           appLogger.info('Rollback successful for attachments paths: $uploadedAttachmentPaths');
+         } catch (rollbackError, rs) {
+           appLogger.severe('Error during attachments storage rollback', rollbackError, rs);
          }
        }
-       if (!mounted) return;
-       ScaffoldMessenger.of(context).showSnackBar(
+       if (!isMounted) return; // Use captured isMounted
+       messenger.showSnackBar(
          SnackBar(content: Text('Error updating complaint or uploading files: $e'))
        );
     } finally {
-       if (mounted) {
+       if (isMounted) { // Use captured isMounted
           // Reset state even on error, or maybe only on success?
           // For now, reset regardless
           setState(() {

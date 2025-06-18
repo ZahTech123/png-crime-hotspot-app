@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
+import 'package:ncdc_ccms_app/utils/app_logger.dart'; // Import appLogger
 
 // ======== SAFE MAPBOX WIDGET WRAPPER ========
 // This wrapper ensures proper lifecycle management for MapboxMap
@@ -12,14 +13,14 @@ class SafeMapboxWidget extends StatefulWidget {
   final bool textureView;
 
   const SafeMapboxWidget({
-    Key? key,
+    super.key,
     required this.onMapCreated,
     this.onStyleLoadedListener,
     this.onCameraChangeListener,
     required this.cameraOptions,
     required this.styleUri,
     this.textureView = true,
-  }) : super(key: key);
+  });
 
   @override
   State<SafeMapboxWidget> createState() => _SafeMapboxWidgetState();
@@ -60,10 +61,10 @@ class _SafeMapboxWidgetState extends State<SafeMapboxWidget> {
     try {
       if (map != null) {
         map.dispose();
-        print("SafeMapboxWidget: Map successfully disposed");
+        appLogger.fine("SafeMapboxWidget: Map successfully disposed");
       }
-    } catch (e) {
-      print("SafeMapboxWidget: Error during disposal: $e");
+    } catch (e, s) {
+      appLogger.warning("SafeMapboxWidget: Error during disposal", e, s);
     }
 
     super.dispose();

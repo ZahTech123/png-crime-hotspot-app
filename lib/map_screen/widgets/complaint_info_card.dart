@@ -10,13 +10,13 @@ class ComplaintInfoCard extends StatelessWidget {
   final VoidCallback onClose;
 
   const ComplaintInfoCard({
-    Key? key,
+    super.key,
     required this.title,
     required this.status,
     required this.imageUrl,
     required this.onShowMoreInfo,
     required this.onClose,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +31,7 @@ class ComplaintInfoCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16.0),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+                  color: Colors.black.withAlpha((0.1 * 255).round()),
             blurRadius: 10.0,
             offset: const Offset(0, 4),
           ),
@@ -134,7 +134,7 @@ class ComplaintInfoCard extends StatelessWidget {
             right: 8,
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.black.withAlpha((0.5 * 255).round()),
                 shape: BoxShape.circle,
               ),
               child: InkWell(

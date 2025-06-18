@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
@@ -13,24 +14,19 @@ import 'widgets/custom_bottom_navbar.dart';
 import 'map_screen.dart';
 import 'reports_page.dart';
 import 'add_complaint_dialog.dart';
-
-// TODO: Replace with your actual Supabase URL and Anon Key
-const String supabaseUrl = 'https://mdyzvdvbodwryycqlptn.supabase.co';
-const String supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1keXp2ZHZib2R3cnl5Y3FscHRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU3MDA0OTEsImV4cCI6MjA2MTI3NjQ5MX0.WZVogJwmtNF0mEMx36PrbLM71O1oNV0snk8FshSz9sg';
-
-// Define Mapbox Access Token here (copied from map_screen.dart)
-// TODO: Consider moving sensitive keys to environment variables or a config file for better security
-const String mapboxAccessToken = 'pk.eyJ1Ijoiam9obnNraXBvbGkiLCJhIjoiY201c3BzcDYxMG9neDJscTZqeXQ4MGk4YSJ9.afrO8Lq1P6mIUbSyQ6VCsQ';
+import 'package:ncdc_ccms_app/utils/app_logger.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  setupLogging(); // Initialize logger
+  await dotenv.load(fileName: ".env");
 
   // Set Mapbox access token once
-  mapbox.MapboxOptions.setAccessToken(mapboxAccessToken);
+  mapbox.MapboxOptions.setAccessToken(dotenv.env['MAPBOX_ACCESS_TOKEN']!);
 
   await Supabase.initialize(
-    url: supabaseUrl,
-    anonKey: supabaseAnonKey,
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
   final supabaseClient = Supabase.instance.client;
@@ -181,24 +177,4 @@ class MainScreenState extends State<MainScreen> {
       ),
     );
   }
-}
-
-// You might need to adjust the placeholder MyHomePage or remove it
-// if CityDataDashboard is your primary logged-in view.
-class MyHomePage extends StatelessWidget {
- const MyHomePage({super.key, required this.title});
-
- final String title;
-
- @override
- Widget build(BuildContext context) {
-   return Scaffold(
-     appBar: AppBar(
-       title: Text(title),
-     ),
-     body: Center(
-       child: Text('Placeholder Home Page - Should be replaced by CityDataDashboard'),
-     ),
-   );
- }
 }

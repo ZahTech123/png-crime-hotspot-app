@@ -11,19 +11,16 @@ import 'package:ncdc_ccms_app/image_service.dart';
 import 'package:ncdc_ccms_app/widgets/custom_header.dart';
 
 class HomeFeedScreen extends StatefulWidget {
-  const HomeFeedScreen({Key? key}) : super(key: key);
+  const HomeFeedScreen({super.key});
 
   @override
-  _HomeFeedScreenState createState() => _HomeFeedScreenState();
+  State<HomeFeedScreen> createState() => HomeFeedScreenState();
 }
 
-class _HomeFeedScreenState extends State<HomeFeedScreen> {
+class HomeFeedScreenState extends State<HomeFeedScreen> {
   final ScrollController _scrollController = ScrollController();
   int _selectedIndex = 0;
   bool _isNavbarVisible = true;
-
-  // Define constants for styling
-  static const Color darkText = Color(0xFF333333);
 
   // --- Screens for Bottom Navigation ---
   late final List<Widget> _widgetOptions;
@@ -154,9 +151,9 @@ class ComplaintFeedView extends StatelessWidget {
   final ScrollController scrollController; // Accept controller
 
   const ComplaintFeedView({
-    Key? key,
+    super.key,
     required this.scrollController, // Require controller
-  }) : super(key: key);
+  });
 
   static const Color bgColor = Color(0xFFF0F2F5);
 
@@ -227,7 +224,7 @@ class ComplaintFeedView extends StatelessWidget {
 }
 
 class AddIncidentReportScreen extends StatelessWidget {
-  const AddIncidentReportScreen({Key? key}) : super(key: key);
+  const AddIncidentReportScreen({super.key});
 
   @override
   Widget build(BuildContext context) {

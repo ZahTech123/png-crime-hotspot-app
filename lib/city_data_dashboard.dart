@@ -100,7 +100,7 @@ class _CityDataDashboardState extends State<CityDataDashboard> {
                 title: Text(complaint.issueType,
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(
-                    'Status: ${complaint.status}\n${complaint.description ?? ''}'),
+                    'Status: ${complaint.status}\n${complaint.description}'),
                 isThreeLine: true,
                 onTap: () {
                   if (mounted) {

@@ -38,6 +38,7 @@ dependencies:
   uuid: ^4.5.1
   intl: ^0.19.0
   http: ^1.2.1
+  flutter_dotenv: ^5.1.0
   # flutter_map: ^8.1.1 # Replaced with mapbox_gl
   mapbox_maps_flutter: ^1.1.0
   location: ^6.0.2
