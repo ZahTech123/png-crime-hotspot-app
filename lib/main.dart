@@ -11,7 +11,8 @@ import 'login_page.dart';        // Import LoginPage
 import 'image_service.dart'; // Import ImageService
 import 'home_feed_screen.dart';
 import 'widgets/custom_bottom_navbar.dart';
-import 'map_screen.dart';
+import 'features/map/ui/map_screen.dart'; // Updated path
+import 'state/map_provider.dart'; // Corrected Import MapProvider path
 import 'reports_page.dart';
 import 'add_complaint_dialog.dart';
 import 'package:ncdc_ccms_app/utils/app_logger.dart';
@@ -134,7 +135,10 @@ class MainScreenState extends State<MainScreen> {
     super.initState();
     _screens = [
       const HomeFeedScreen(),
-      MapScreen(onBack: () => _navigateTo(0)),
+      ChangeNotifierProvider(
+        create: (_) => MapProvider(), // Create MapProvider here
+        child: MapScreen(onBack: () => _navigateTo(0)),
+      ),
       const ReportsPage(),
       const Center(child: Text("Profile")), // Placeholder for Profile Screen
     ];

@@ -5,12 +5,14 @@ import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
-import 'package:ncdc_ccms_app/map_screen/widgets/complaint_carousel.dart';
-import 'package:ncdc_ccms_app/utils/app_logger.dart';
-import 'package:ncdc_ccms_app/map_screen/widgets/complaint_details_sheet.dart';
-import 'package:ncdc_ccms_app/map_screen/widgets/map_controls.dart';
-import 'package:ncdc_ccms_app/map_screen/widgets/safe_mapbox_widget.dart';
-import 'package:ncdc_ccms_app/utils/size_config.dart';
+import '../widgets/complaint_carousel.dart';
+import '../../utils/app_logger.dart';
+import '../state/map_provider.dart'; // Import MapProvider
+import 'package:provider/provider.dart'; // Import Provider
+import '../widgets/complaint_details_sheet.dart';
+import '../widgets/map_controls.dart';
+import '../widgets/safe_mapbox_widget.dart';
+import '../../utils/size_config.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ======== HELPER CLASS FOR ANNOTATION CLICKS ========
@@ -112,27 +114,29 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  mapbox.MapboxMap? mapboxMap;
+  mapbox.MapboxMap? mapboxMap; // Keep local map controller instance
   bool _isDisposed = false;
-  mapbox.PointAnnotationManager? _pointAnnotationManager;
-  List<Map<String, dynamic>> _complaintsData = [];
-  bool _isLoadingComplaints = true;
+  mapbox.PointAnnotationManager? _pointAnnotationManager; // Keep local annotation manager
 
-  List<mapbox.Position> _complaintCoordinates = [];
-  int _currentMarkerIndex = -1;
+  // Removed state variables now in MapProvider:
+  // List<Map<String, dynamic>> _complaintsData = [];
+  // bool _isLoadingComplaints = true;
+  // List<mapbox.Position> _complaintCoordinates = [];
+  // int? _selectedComplaintIndex;
+  // List<mapbox.PointAnnotation> _currentAnnotations = [];
+  // double _currentZoom = 12.0; // Will get from provider
+  // PageController? _pageController; // Will get from provider
+  // Map<String, String> _annotationIdToComplaintId = {};
+  // Map<String, int> _complaintIdToDataIndex = {};
 
-  int? _selectedComplaintIndex;
-  PageController? _pageController;
+  int _currentMarkerIndex = -1; // Still local if it only drives map flying, not general UI state.
+                                  // Or move to provider if other widgets need to know the "map's current marker".
+                                  // For now, keeping it local as it's tied to _flyToCoordinate.
 
-  List<mapbox.PointAnnotation> _currentAnnotations = [];
-  double _currentZoom = 12.0;
-  Timer? _debounceTimer;
-  static const double _initialIconSize = 0.5;
+  Timer? _debounceTimer; // UI-specific timer, keep local
+  static const double _initialIconSize = 0.5; // Constant, keep local or move to provider if configurable
 
-  Map<String, String> _annotationIdToComplaintId = {};
-  Map<String, int> _complaintIdToDataIndex = {};
-
-  final Set<String> _bouncingAnnotationIds = {};
+  final Set<String> _bouncingAnnotationIds = {}; // UI-specific animation state, keep local
 
   static const double _zoomIncrement = 1.0;
   static const double _bearingIncrement = 30.0;
@@ -150,7 +154,55 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(viewportFraction: 0.85);
+    // Accessing provider here is fine for one-off actions, but listen:false for events.
+    // However, initPageController should ideally be called when the provider is created or first used.
+    // For now, let's assume MapScreen is the primary user of pageController.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) { // Ensure mounted before accessing context.read
+          context.read<MapProvider>().initPageController();
+      }
+    });
+    // _fetchComplaintCoordinates will be called from _onStyleLoadedCallback
+    // which itself is called after map is ready.
+  }
+
+  @override
+  void dispose() {
+    appLogger.info("Disposing MapScreen");
+    _debounceTimer?.cancel();
+    // _pageController?.dispose(); // PageController is now managed by MapProvider
+    if (mounted) { // Check mounted before accessing context
+      context.read<MapProvider>().disposePageController();
+    }
+    _isDisposed = true;
+
+    final manager = _pointAnnotationManager;
+    if (manager != null) {
+      try {
+        mapboxMap?.annotations.removeAnnotationManager(manager);
+        appLogger.fine("PointAnnotationManager cleaned up.");
+      } catch (e, s) {
+        appLogger.warning("Error cleaning up PointAnnotationManager", e, s);
+      }
+      _pointAnnotationManager = null;
+    }
+
+    final map = mapboxMap;
+    mapboxMap = null;
+
+    try {
+      if (map != null) {
+        map.dispose();
+        appLogger.fine("MapboxMap successfully disposed");
+      } else {
+        appLogger.fine("No MapboxMap instance to dispose");
+      }
+    } catch (e, s) {
+      appLogger.warning("Error during MapboxMap disposal", e, s);
+    }
+
+    super.dispose();
+    appLogger.info("MapScreen fully disposed");
   }
 
   void _cancelMapOperations() {

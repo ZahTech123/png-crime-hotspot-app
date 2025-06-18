@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:ncdc_ccms_app/utils/size_config.dart';
+import '../../../utils/size_config.dart';
 
 class ComplaintInfoCard extends StatelessWidget {
   // Placeholder data - in a real app, you'd pass a Complaint object

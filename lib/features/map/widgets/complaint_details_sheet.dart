@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:ncdc_ccms_app/utils/app_logger.dart'; // Import appLogger
+import '../../../utils/app_logger.dart'; // Import appLogger
 
 // Helper function to fetch full details for a single complaint
 Future<Map<String, dynamic>?> _fetchComplaintDetails(String complaintId, BuildContext context) async {

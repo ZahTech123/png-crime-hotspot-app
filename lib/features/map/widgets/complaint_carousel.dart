@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:ncdc_ccms_app/map_screen/widgets/complaint_info_card.dart';
-import 'package:ncdc_ccms_app/utils/size_config.dart';
+import './complaint_info_card.dart';
+import '../../../utils/size_config.dart';
 
 class ComplaintCarousel extends StatefulWidget {
   final List<Map<String, dynamic>> complaintsData;
