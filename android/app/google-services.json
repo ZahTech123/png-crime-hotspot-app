@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "751539950984",
+    "firebase_url": "https://ncdc-city-management-system-default-rtdb.firebaseio.com",
+    "project_id": "ncdc-city-management-system",
+    "storage_bucket": "ncdc-city-management-system.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:751539950984:android:ab16716ba859af0765d63d",
+        "android_client_info": {
+          "package_name": "com.example.ncdc_ccms_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCvq3VCSO4orItUjBfoJVLBi9Txu08N-oE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
