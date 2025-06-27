@@ -7,7 +7,8 @@ import 'package:provider/provider.dart'; // Import Provider
 import 'dart:typed_data'; // Import for Uint8List
 import 'package:flutter/services.dart'; // Import for rootBundle
 import 'dart:async'; // Import for Timer
-import 'package:flutter/foundation.dart'; // Required for compute
+// import 'package:flutter/foundation.dart'; // Required for compute - NO LONGER USED
+import 'dart:ui' as ui; // Import dart:ui for image decoding
 
 // Import the extracted widget
 import 'package:ncdc_ccms_app/map_screen/widgets/safe_mapbox_widget.dart';
@@ -17,99 +18,6 @@ import 'package:ncdc_ccms_app/map_screen/widgets/complaint_details_sheet.dart';
 import 'package:ncdc_ccms_app/map_screen/widgets/persistent_bottom_sheet.dart';
 // Import the new controls widget
 import 'package:ncdc_ccms_app/map_screen/widgets/map_controls.dart';
-
-// --- Data classes for background processing ---
-
-// Input for the isolate
-class MarkerCreationInput {
-  final List<Map<String, dynamic>> complaintsData;
-  final Uint8List markerImageData;
-  final double initialIconSize;
-
-  MarkerCreationInput(this.complaintsData, this.markerImageData, this.initialIconSize);
-}
-
-// Output from the isolate
-class ProcessedMarkerResult {
-  final List<mapbox.PointAnnotationOptions> options;
-  final List<mapbox.Position> coordinates;
-  // Key: a string representation of the coordinate, e.g., "lng,lat"
-  // Value: complaint ID
-  final Map<String, String> geometryKeyToComplaintId;
-
-  ProcessedMarkerResult(
-      this.options, this.coordinates, this.geometryKeyToComplaintId);
-}
-
-// --- Top-level function for background processing ---
-// This must be a top-level function or a static method to be used with compute.
-ProcessedMarkerResult _prepareMarkerData(MarkerCreationInput input) {
-  final List<mapbox.PointAnnotationOptions> options = [];
-  final List<mapbox.Position> coordinates = [];
-  final Map<String, String> geometryKeyToComplaintId = {};
-
-  for (int i = 0; i < input.complaintsData.length; i++) {
-    final complaint = input.complaintsData[i];
-    final dynamic latValue = complaint['latitude'];
-    final dynamic lonValue = complaint['longitude'];
-    final dynamic complaintIdValue = complaint['id'];
-
-    double? latitude;
-    double? longitude;
-    String? complaintId;
-
-    if (latValue is num) {
-      latitude = latValue.toDouble();
-    } else if (latValue is String) {
-      latitude = double.tryParse(latValue);
-    }
-
-    if (lonValue is num) {
-      longitude = lonValue.toDouble();
-    } else if (lonValue is String) {
-      longitude = double.tryParse(lonValue);
-    }
-
-    if (complaintIdValue != null) {
-      complaintId = complaintIdValue.toString();
-    }
-
-    if (latitude != null &&
-        longitude != null &&
-        complaintId != null &&
-        complaintId.isNotEmpty) {
-      final position = mapbox.Position(longitude, latitude);
-      final geometryKey = "${position.lng},${position.lat}";
-
-      options.add(mapbox.PointAnnotationOptions(
-        geometry: mapbox.Point(coordinates: position),
-        image: input.markerImageData,
-        iconSize: input.initialIconSize,
-      ));
-      coordinates.add(position);
-      geometryKeyToComplaintId[geometryKey] = complaintId;
-    }
-  }
-  return ProcessedMarkerResult(options, coordinates, geometryKeyToComplaintId);
-}
-// --- End background processing helpers ---
-
-// ======== SAFE MAPBOX WIDGET WRAPPER ========
-// This wrapper ensures proper lifecycle management for MapboxMap
-// REMOVED SafeMapboxWidget code
-
-// --- Custom Click Listener Class ---
-class PointAnnotationClickListener extends mapbox.OnPointAnnotationClickListener {
-  final Function(mapbox.PointAnnotation) onTap;
-  
-  PointAnnotationClickListener({required this.onTap});
-  
-  @override
-  bool onPointAnnotationClick(mapbox.PointAnnotation annotation) {
-    onTap(annotation);
-    return true; // Indicate the event was handled
-  }
-}
 
 // --- Map Screen Widget ---
 class MapScreen extends StatefulWidget {
@@ -122,30 +30,38 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   mapbox.MapboxMap? mapboxMap;
   bool _isDisposed = false; // Track disposal state
-  mapbox.PointAnnotationManager? _pointAnnotationManager; // Manager for markers
+  // mapbox.PointAnnotationManager? _pointAnnotationManager; // Manager for markers - REMOVED FOR CLUSTERING
   List<Map<String, dynamic>> _complaintsData = []; // To store fetched complaint coordinates
   bool _isLoadingComplaints = true; // Loading state for complaints
 
   // --- Add state for marker navigation ---
-  List<mapbox.Position> _complaintCoordinates = []; // Store valid marker coordinates
-  int _currentMarkerIndex = -1; // Index of the currently focused marker
+  List<mapbox.Position> _complaintCoordinates = []; // Store valid marker coordinates for navigation/bounds
+  int _currentMarkerIndex = -1; // Index of the currently focused marker (may need re-evaluation with clustering)
   // --------------------------------------
 
   // --- State for dynamic marker sizing ---
-  List<mapbox.PointAnnotation> _currentAnnotations = []; // Store created annotations
+  // List<mapbox.PointAnnotation> _currentAnnotations = []; // Store created annotations - REMOVED FOR CLUSTERING
   double _currentZoom = 12.0; // Store current zoom level
   Timer? _debounceTimer; // Timer for debouncing size updates
-  static const double _initialIconSize = 0.5; // Store initial size
+  // static const double _initialIconSize = 0.5; // Store initial size - REMOVED FOR CLUSTERING (handled by layers)
   // -------------------------------------
 
   // --- State for marker click handling ---
-  Map<String, String> _annotationIdToComplaintId = {};
+  // Map<String, String> _annotationIdToComplaintId = {}; // REMOVED FOR CLUSTERING (handled by feature properties)
   
   // --- State for bottom sheet ---
   bool _isBottomSheetVisible = false;
   List<Map<String, dynamic>>? _selectedComplaintsData;
   int? _selectedComplaintIndex;
   // ------------------------------------
+
+  // --- Constants for GeoJSON Source and Layers ---
+  static const String _geojsonSourceId = "complaints-source";
+  static const String _clusterLayerId = "clusters-layer";
+  static const String _clusterCountLayerId = "cluster-count-layer";
+  static const String _unclusteredPointLayerId = "unclustered-points-layer";
+  static const String _markerIconImageKey = "marker-icon";
+  // ---------------------------------------------
 
   // --- IMPORTANT: Replace with your actual Mapbox access token ---
   // Consider loading this from configuration/environment variables in a real app
@@ -263,11 +179,138 @@ class _MapScreenState extends State<MapScreen> {
   // Method to apply ornament settings after map is created
   // REMOVED METHOD _applyOrnamentSettings
 
+  // --- Map Tap Listener for Clustered Features ---
+  void _onMapTap(mapbox.MapContentGestureContext context) async {
+    if (_isDisposed || !mounted || mapboxMap == null) return;
+
+    final point = context.point;
+    final options = mapbox.RenderedQueryOptions(
+      layerIds: [_clusterLayerId, _unclusteredPointLayerId], // Query both cluster and individual point layers
+      filter: null,
+    );
+
+    try {
+      final List<mapbox.QueriedFeature?> features = await mapboxMap!.queryRenderedFeatures(
+        mapbox.RenderedQueryGeometry(screenCoordinate: point),
+        options,
+      );
+
+      if (features.isEmpty) {
+        print("Map tap: No features found at tap location.");
+        return;
+      }
+
+      final firstFeature = features.first?.feature; // The feature is a Map<String, dynamic>
+      if (firstFeature == null) {
+        print("Map tap: Found feature is null.");
+        return;
+      }
+
+      final properties = firstFeature['properties'] as Map<String, dynamic>?;
+      if (properties == null) {
+        print("Map tap: Feature properties are null.");
+        return;
+      }
+
+      if (properties.containsKey('cluster_id')) {
+        // This is a cluster
+        final num clusterId = properties['cluster_id'] as num;
+        print("Tapped on cluster with ID: $clusterId");
+
+        // Option 1: Get cluster expansion zoom
+        try {
+          final zoom = await mapboxMap!.style.getSourceClusterExpansionZoom(_geojsonSourceId, firstFeature);
+          final geometry = firstFeature['geometry'] as Map<String, dynamic>?;
+          if (geometry != null && geometry['coordinates'] is List) {
+            final coordsList = geometry['coordinates'] as List;
+            if (coordsList.length == 2) {
+              final lng = coordsList[0] as double;
+              final lat = coordsList[1] as double;
+              mapboxMap!.flyTo(
+                mapbox.CameraOptions(
+                  center: mapbox.Point(coordinates: mapbox.Position(lng, lat)),
+                  zoom: zoom.toDouble() + 0.5, // Add a little extra zoom
+                ),
+                mapbox.MapAnimationOptions(duration: 800),
+              );
+            }
+          }
+        } catch (e) {
+          print("Error getting cluster expansion zoom or flying to cluster: $e");
+          // Fallback: simple zoom in if expansion zoom fails
+            final geometry = firstFeature['geometry'] as Map<String, dynamic>?;
+            if (geometry != null && geometry['coordinates'] is List) {
+                final coordsList = geometry['coordinates'] as List;
+                if (coordsList.length == 2) {
+                    final lng = coordsList[0] as double;
+                    final lat = coordsList[1] as double;
+                    final currentCamera = await mapboxMap!.getCameraState();
+                    mapboxMap!.flyTo(
+                        mapbox.CameraOptions(
+                            center: mapbox.Point(coordinates: mapbox.Position(lng, lat)),
+                            zoom: currentCamera.zoom + 2, // Generic zoom increment
+                        ),
+                        mapbox.MapAnimationOptions(duration: 800),
+                    );
+                }
+            }
+        }
+      } else if (properties.containsKey('id')) {
+        // This is an individual point (complaint)
+        // The 'id' here should be the complaint ID we stored in GeoJSON properties
+        final String complaintId = properties['id'].toString();
+        print("Tapped on individual complaint with ID: $complaintId");
+        _showComplaintDetailsSheet(complaintId);
+      } else {
+        print("Map tap: Tapped feature has no 'cluster_id' or 'id' property.");
+      }
+    } catch (e) {
+      if (mounted && !_isDisposed) {
+        print("Error querying rendered features: $e");
+      }
+    }
+  }
   // --- Style Loaded Callback ---
    void _onStyleLoadedCallback(mapbox.StyleLoadedEventData data) async {
     if (_isDisposed || !mounted || mapboxMap == null) return;
 
     print("Style loaded callback received.");
+
+import 'dart:ui' as ui; // Import dart:ui for image decoding
+// ... (other imports) ...
+
+// --- Style Loaded Callback ---
+   void _onStyleLoadedCallback(mapbox.StyleLoadedEventData data) async {
+    if (_isDisposed || !mounted || mapboxMap == null) return;
+
+    print("Style loaded callback received.");
+
+    // Add marker icon to style
+    try {
+      final ByteData bytes = await rootBundle.load('assets/map-point.png');
+      final Uint8List imageData = bytes.buffer.asUint8List();
+
+      // Decode image to get dimensions
+      final codec = await ui.instantiateImageCodec(imageData);
+      final frameInfo = await codec.getNextFrame();
+      final image = frameInfo.image;
+
+      final mbxImage = mapbox.MbxImage(width: image.width, height: image.height, data: imageData);
+
+      await mapboxMap!.style.addStyleImage(
+          _markerIconImageKey,
+          1.0, // scale: Use 1.0 to add the image at its native resolution
+          mbxImage,
+          false, // sdf: false, as it's likely a raster color icon
+          [],    // stretchX
+          [],    // stretchY
+          null); // content
+      print("Marker icon '$_markerIconImageKey' (${image.width}x${image.height}) added to style at scale 1.0.");
+    } catch (e) {
+      if (mounted && !_isDisposed) {
+        print("Error adding marker icon to style: $e");
+      }
+    }
 
     // --- Attempt to configure ornaments via controller ---
     try {
@@ -480,147 +523,168 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  // --- Helper to add markers from Supabase data ---
-  // Returns true if markers were successfully added, false otherwise.
+  // --- Helper to add markers from Supabase data using GeoJSON clustering ---
+  // Returns true if markers were successfully added/source updated, false otherwise.
   Future<bool> _addMarkers() async {
-    print("DEBUG: _addMarkers ENTERED");
-    if (_isDisposed || !mounted || _isLoadingComplaints || _complaintsData.isEmpty) {
-      print("Add markers skipped: Disposed=$_isDisposed, Mounted=$mounted, Loading=$_isLoadingComplaints, DataEmpty=${_complaintsData.isEmpty}.");
+    print("GeoJSON Clustering: _addMarkers ENTERED");
+    if (_isDisposed || !mounted || mapboxMap == null || _complaintsData.isEmpty) {
+      print(
+          "GeoJSON Clustering: Add markers skipped. Disposed=$_isDisposed, Mounted=$mounted, MapCtrlNull=${mapboxMap == null}, DataEmpty=${_complaintsData.isEmpty}.");
       return false;
     }
 
-    final mapController = mapboxMap;
-    if (mapController == null) {
-      print("Add markers skipped: Map controller null.");
-      return false;
-    }
+    final mapController = mapboxMap!;
 
-    print("Adding markers from fetched data...");
+    List<Map<String, dynamic>> features = [];
+    List<mapbox.Position> newComplaintCoordinates = [];
 
     try {
-      print("Loading marker image asset...");
-      final ByteData bytes = await rootBundle.load('assets/map-point.png');
-      final Uint8List imageData = bytes.buffer.asUint8List();
-      print("Marker image loaded successfully.");
+      // 1. Prepare GeoJSON data
+      for (var complaint in _complaintsData) {
+        final dynamic latValue = complaint['latitude'];
+        final dynamic lonValue = complaint['longitude'];
+        final dynamic complaintIdValue = complaint['id'];
 
-      if (_isDisposed || !mounted) return false;
+        double? latitude;
+        double? longitude;
+        String? complaintId;
 
-      // --- Offload processing to a background isolate ---
-      print("Preparing marker data in background...");
-      final creationInput = MarkerCreationInput(_complaintsData, imageData, _initialIconSize);
-      final processedResult = await compute(_prepareMarkerData, creationInput);
-      print("Background processing complete. Received ${processedResult.options.length} marker options.");
-      // ------------------------------------------------
+        if (latValue is num) latitude = latValue.toDouble();
+        else if (latValue is String) latitude = double.tryParse(latValue);
 
-      if (_isDisposed || !mounted) return false;
+        if (lonValue is num) longitude = lonValue.toDouble();
+        else if (lonValue is String) longitude = double.tryParse(lonValue);
 
-      final options = processedResult.options;
-      final coordinates = processedResult.coordinates;
-      final geometryKeyToComplaintId = processedResult.geometryKeyToComplaintId;
+        if (complaintIdValue != null) complaintId = complaintIdValue.toString();
 
-      if (options.isEmpty) {
-        print("No valid marker options generated from fetched data.");
-        // We now handle the camera fallback in the calling function.
-        return false;
-      }
-
-      print("DEBUG: Checking/Creating PointAnnotationManager...");
-      _pointAnnotationManager ??= await mapController.annotations.createPointAnnotationManager();
-
-      if (_isDisposed || !mounted || _pointAnnotationManager == null) {
-        print("DEBUG: PointAnnotationManager creation failed or widget disposed.");
-        return false;
-      }
-      print("DEBUG: PointAnnotationManager exists. Proceeding to clear markers.");
-
-      await _pointAnnotationManager!.deleteAll();
-      if(mounted && !_isDisposed) {
-        setState(() {
-          _complaintCoordinates.clear();
-          _currentAnnotations.clear();
-          _currentMarkerIndex = -1;
-          _annotationIdToComplaintId.clear();
-        });
-      }
-      print("Existing markers and coordinates cleared.");
-
-      print("DEBUG: About to call createMulti with ${options.length} options");
-      final List<mapbox.PointAnnotation?> createdAnnotationsNullable = await _pointAnnotationManager!.createMulti(options);
-      final List<mapbox.PointAnnotation> createdAnnotations = createdAnnotationsNullable.whereType<mapbox.PointAnnotation>().toList();
-      print("DEBUG: Created ${createdAnnotations.length} annotations from ${createdAnnotationsNullable.length} attempts");
-
-      // --- Populate the annotation ID to complaint ID map ---
-      final newAnnotationIdMap = <String, String>{};
-      
-      for (final annotation in createdAnnotations) {
-        final coords = annotation.geometry.coordinates;
-        final geometryKey = "${coords.lng},${coords.lat}";
-        final complaintId = geometryKeyToComplaintId[geometryKey];
-
-        if (complaintId != null) {
-          // To handle potential duplicate coordinates, remove the key after use
-          // Note: This means if two complaints share exact coordinates, only the first will be mapped.
-          // This is an edge case to be aware of.
-          newAnnotationIdMap[annotation.id] = complaintId;
-          // geometryKeyToComplaintId.remove(geometryKey); // Optional: for strict 1-to-1 mapping
-          print("MARKER_DEBUG: Mapping Annotation ID ${annotation.id} to Complaint ID $complaintId");
-        } else {
-          print("MARKER_ERROR: Could not find complaint ID for annotation at ${coords.lng},${coords.lat}");
+        if (latitude != null && longitude != null && complaintId != null && complaintId.isNotEmpty) {
+          features.add({
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [longitude, latitude]
+            },
+            "properties": {
+              "id": complaintId, // Store complaint ID in properties
+              // Add any other properties you might want to use for styling or popups
+            }
+          });
+          newComplaintCoordinates.add(mapbox.Position(longitude, latitude));
         }
       }
-      // ------------------------------------------------------
 
       if (mounted && !_isDisposed) {
         setState(() {
-          _complaintCoordinates = coordinates;
-          _currentAnnotations = createdAnnotations;
-          _annotationIdToComplaintId = newAnnotationIdMap;
+          _complaintCoordinates = newComplaintCoordinates;
         });
-
-        print("MARKER_DEBUG: Final annotation ID to complaint ID mapping:");
-        _annotationIdToComplaintId.forEach((annotationId, complaintId) {
-          print("  $annotationId -> $complaintId");
-        });
-
-        _updateAnnotationSize(_currentZoom, forceUpdate: true);
-        
-        // --- CAMERA POSITIONING REMOVED FROM HERE ---
       }
 
-      print("DEBUG: About to add click listener");
-      print("DEBUG: Checking _pointAnnotationManager status before adding listener: Is null? ${_pointAnnotationManager == null}");
-      try {
-        _pointAnnotationManager?.addOnPointAnnotationClickListener(
-          PointAnnotationClickListener(
-            onTap: (mapbox.PointAnnotation annotation) {
-              print("MARKER_DEBUG: Listener callback triggered for annotation ID: ${annotation.id}");
-              _onMarkerTapped(annotation);
-            }
-          )
-        );
-        print("MARKER_DEBUG: Added click listener (addOnPointAnnotationClickListener) to PointAnnotationManager.");
-      } catch (e) {
-        print("MARKER_ERROR: Failed to add click listener: $e");
-      }
-      print("MARKER_DEBUG: PointAnnotationManager is ${_pointAnnotationManager == null ? 'NULL' : 'NOT NULL'} after adding listener.");
-
-      if (!mounted || _isDisposed) {
-        print("Widget disposed after adding markers.");
+      if (features.isEmpty) {
+        print("GeoJSON Clustering: No valid features to add (complaintCoordinates updated to empty).");
         return false;
       }
-      print("SUCCESS: ${createdAnnotations.length} markers added from Supabase data.");
+
+      final geoJsonData = {
+        "type": "FeatureCollection",
+        "features": features,
+      };
+      final geoJsonStr = jsonEncode(geoJsonData);
+
+      // 2. Remove existing source and layers if they exist (for updates)
+      try {
+        if (await mapController.style.styleLayerExists(_clusterLayerId)) {
+          await mapController.style.removeStyleLayer(_clusterLayerId);
+        }
+        if (await mapController.style.styleLayerExists(_clusterCountLayerId)) {
+          await mapController.style.removeStyleLayer(_clusterCountLayerId);
+        }
+        if (await mapController.style.styleLayerExists(_unclusteredPointLayerId)) {
+          await mapController.style.removeStyleLayer(_unclusteredPointLayerId);
+        }
+        if (await mapController.style.styleSourceExists(_geojsonSourceId)) {
+          await mapController.style.removeStyleSource(_geojsonSourceId);
+        }
+         print("GeoJSON Clustering: Removed existing source/layers if any.");
+      } catch (e) {
+        print("GeoJSON Clustering: Error removing existing source/layers (might be first run): $e");
+      }
+
+      if (_isDisposed || !mounted) return false;
+
+      // 3. Add GeoJSON source with clustering enabled
+      await mapController.style.addSource(
+        mapbox.GeoJsonSource(
+          id: _geojsonSourceId,
+          data: geoJsonStr, // Pass GeoJSON as a string
+          cluster: true,
+          clusterMaxZoom: 14, // Max zoom to cluster points on
+          clusterRadius: 50, // Radius of each cluster when clustering points (defaults to 50)
+          clusterMinPoints: 2, // Minimum number of points to form a cluster
+        ),
+      );
+      print("GeoJSON Clustering: Source '$_geojsonSourceId' added.");
+      if (_isDisposed || !mounted) return false;
+
+      // 4. Add layer for the clusters (circles)
+      await mapController.style.addLayer(
+        mapbox.CircleLayer(
+          id: _clusterLayerId,
+          sourceId: _geojsonSourceId,
+          filter: ['has', 'point_count'], // Filter for clustered points
+          circleColor: Colors.blue.value,
+          circleRadius: [
+            'step', // Expression type
+            ['get', 'point_count'], // Get the point_count property
+            20, // Default radius
+            10, 25, // If point_count >= 10, radius is 25
+            50, 30  // If point_count >= 50, radius is 30
+          ],
+          circleOpacity: 0.8,
+        ),
+      );
+      print("GeoJSON Clustering: Layer '$_clusterLayerId' added.");
+      if (_isDisposed || !mounted) return false;
       
-      // Return true as markers were successfully processed and added
-      return createdAnnotations.isNotEmpty;
+      // 5. Add layer for the cluster point counts (text)
+      await mapController.style.addLayer(
+        mapbox.SymbolLayer(
+          id: _clusterCountLayerId,
+          sourceId: _geojsonSourceId,
+          filter: ['has', 'point_count'],
+          textField: ['get', 'point_count_abbreviated'], // Or ['get', 'point_count'].toString()
+          textSize: 12.0,
+          textColor: Colors.white.value,
+          textIgnorePlacement: true, // Allow text to overlap
+          textAllowOverlap: true,    // Allow text to overlap
+        ),
+      );
+      print("GeoJSON Clustering: Layer '$_clusterCountLayerId' added.");
+      if (_isDisposed || !mounted) return false;
+
+      // 6. Add layer for unclustered points (individual complaint markers)
+      await mapController.style.addLayer(
+        mapbox.SymbolLayer(
+          id: _unclusteredPointLayerId,
+          sourceId: _geojsonSourceId,
+          filter: ['!', ['has', 'point_count']], // Filter for non-clustered points
+          iconImage: _markerIconImageKey, // Reference the image added in _onStyleLoadedCallback
+          iconSize: 0.35, // Adjusted to maintain visual size after addStyleImage scale change
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
+        ),
+      );
+      print("GeoJSON Clustering: Layer '$_unclusteredPointLayerId' added.");
+
+      print("GeoJSON Clustering: Successfully added GeoJSON source and layers for complaints.");
+      return true;
 
     } catch (e) {
       if (mounted && !_isDisposed) {
-        print("ERROR adding markers: $e");
-        print("DEBUG: Error occurred within _addMarkers: $e");
+        print("GeoJSON Clustering: ERROR adding markers/layers: $e");
       } else {
-        print("Error adding markers occurred, but widget was disposed: $e");
+        print("GeoJSON Clustering: Error adding markers/layers (disposed): $e");
       }
-      return false; // Return false on error
+      return false;
     }
   }
 
@@ -1032,119 +1096,29 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  // --- Camera Change Listener for Dynamic Sizing ---
+  // --- Camera Change Listener (simplified) ---
   void _onCameraChanged(mapbox.CameraChangedEventData event) {
-    // Use longer debounce to reduce update frequency significantly
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
 
-    _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
-      if (_isDisposed || !mounted || _pointAnnotationManager == null || _currentAnnotations.isEmpty) return;
+    _debounceTimer = Timer(const Duration(milliseconds: 100), () async { // Reduced debounce time
+      if (_isDisposed || !mounted || mapboxMap == null) return;
 
       try {
-        // Get current zoom (might need await if camera state is fetched)
-        final cameraState = await mapboxMap?.getCameraState();
-        if (cameraState == null || _isDisposed || !mounted) return;
+        final cameraState = await mapboxMap!.getCameraState();
+        if (_isDisposed || !mounted) return;
+
         final newZoom = cameraState.zoom;
-
-        // Only update if zoom changed significantly (using larger threshold)
-        if ((newZoom - _currentZoom).abs() < 0.5 && _currentAnnotations[0].iconSize != null) return;
-
-        // Update annotation size
-        _updateAnnotationSize(newZoom);
-
+        if ((newZoom - _currentZoom).abs() > 0.1) { // Update _currentZoom if changed significantly
+            _currentZoom = newZoom;
+            print("Camera zoom updated to: $_currentZoom (state not directly set)");
+        }
+        // Other logic dependent on camera changes could go here in the future.
       } catch (e) {
         if (mounted && !_isDisposed) {
-          print("Error in _onCameraChanged during size update: $e");
+          print("Error in _onCameraChanged: $e");
         }
       }
     });
-  }
-
-  // Helper function to update annotation sizes based on zoom
-  Future<void> _updateAnnotationSize(double newZoom, {bool forceUpdate = false}) async {
-    if (_isDisposed || !mounted || _pointAnnotationManager == null || _currentAnnotations.isEmpty) return;
-
-    final newSize = _calculateIconSize(newZoom);
-
-    // Check if update is needed (unless forced) - use larger threshold
-    final currentSize = _currentAnnotations.first.iconSize ?? _initialIconSize;
-    if (!forceUpdate && (newSize - currentSize).abs() < 0.1) {
-       // Skip update if size change is minimal
-       return;
-    }
-
-    print("Updating annotation size for zoom $newZoom to $newSize");
-    _currentZoom = newZoom; // Store the new zoom level
-
-    // More efficient update: Use bulk update if available, otherwise update individually
-    try {
-      // Try to update all annotations in batch for better performance
-      final updatedAnnotations = <mapbox.PointAnnotation>[];
-      
-      for (var annotation in _currentAnnotations) {
-        // Only create new annotation if size actually changed
-        if ((annotation.iconSize ?? _initialIconSize - newSize).abs() > 0.05) {
-          updatedAnnotations.add(mapbox.PointAnnotation(
-            id: annotation.id,
-            geometry: annotation.geometry,
-            image: annotation.image,
-            iconSize: newSize,
-            // Only copy essential properties for performance
-            iconOffset: annotation.iconOffset,
-            iconAnchor: annotation.iconAnchor,
-            iconOpacity: annotation.iconOpacity,
-            iconColor: annotation.iconColor,
-          ));
-        }
-      }
-
-      // Only update if we have annotations to update
-      if (updatedAnnotations.isNotEmpty && mounted && !_isDisposed) {
-        // Use more efficient update approach
-        for (int i = 0; i < updatedAnnotations.length && mounted && !_isDisposed; i++) {
-          await _pointAnnotationManager?.update(updatedAnnotations[i]);
-          
-          // Add small delay between updates to prevent overwhelming the graphics pipeline
-          if (i < updatedAnnotations.length - 1) {
-            await Future.delayed(const Duration(milliseconds: 5));
-          }
-        }
-
-        // Update local state efficiently
-        if (mounted && !_isDisposed) {
-          setState(() {
-            _currentAnnotations = _currentAnnotations.map((annotation) {
-              final updated = updatedAnnotations.firstWhere(
-                (updated) => updated.id == annotation.id,
-                orElse: () => annotation,
-              );
-              return updated;
-            }).toList();
-          });
-        }
-      }
-
-    } catch (e) {
-       if (mounted && !_isDisposed) {
-         print("Error updating annotation sizes: $e");
-       }
-    }
-  }
-
-  // Helper to calculate icon size based on zoom (adjust values as needed)
-  double _calculateIconSize(double zoom) {
-    // Example: Linear interpolation between zoom levels
-    const minZoom = 10.0;
-    const maxZoom = 18.0;
-    const minSize = 0.3;
-    const maxSize = 1.0; // Max size when fully zoomed in
-
-    if (zoom <= minZoom) return minSize;
-    if (zoom >= maxZoom) return maxSize;
-
-    // Linear interpolation
-    final double zoomRatio = (zoom - minZoom) / (maxZoom - minZoom);
-    return minSize + (maxSize - minSize) * zoomRatio;
   }
   // --- End Camera Change Listener ---
 
@@ -1259,30 +1233,47 @@ class _MapScreenState extends State<MapScreen> {
     
     // Clear data structures to free memory
     _complaintCoordinates.clear();
-    _currentAnnotations.clear();
-    _annotationIdToComplaintId.clear();
+    // _currentAnnotations.clear(); // Removed
+    // _annotationIdToComplaintId.clear(); // Removed
     _complaintsData.clear();
     
     // Clear UI state data
     _selectedComplaintsData = null;
     _selectedComplaintIndex = null;
     
-    // Clean up annotation manager first if it exists
-    final manager = _pointAnnotationManager;
-    if (manager != null) {
-      try {
-        // Clear all annotations before removing manager
-        manager.deleteAll().catchError((e) {
-          print("Error clearing annotations during disposal: $e");
-        });
-        
-        // Use the map instance to remove the manager
-        mapboxMap?.annotations.removeAnnotationManager(manager);
-        print("PointAnnotationManager cleaned up.");
-      } catch (e) {
-         print("Error cleaning up PointAnnotationManager: $e");
-      }
-      _pointAnnotationManager = null;
+    // Clean up GeoJSON source and layers
+    final currentMap = mapboxMap; // Capture for safe access
+    if (currentMap != null) {
+      // Use a fire-and-forget approach for these removals during dispose,
+      // as awaiting them might complicate disposal if errors occur.
+      // Log errors but don't let them block disposal.
+      (() async {
+        try {
+          if (await currentMap.style.styleLayerExists(_clusterLayerId)) {
+            await currentMap.style.removeStyleLayer(_clusterLayerId);
+            print("Disposed: Removed cluster layer.");
+          }
+          if (await currentMap.style.styleLayerExists(_clusterCountLayerId)) {
+            await currentMap.style.removeStyleLayer(_clusterCountLayerId);
+            print("Disposed: Removed cluster count layer.");
+          }
+          if (await currentMap.style.styleLayerExists(_unclusteredPointLayerId)) {
+            await currentMap.style.removeStyleLayer(_unclusteredPointLayerId);
+            print("Disposed: Removed unclustered points layer.");
+          }
+          // It's good practice to remove the image too if not used elsewhere
+          if (await currentMap.style.styleImageExists(_markerIconImageKey)){
+            await currentMap.style.removeStyleImage(_markerIconImageKey);
+            print("Disposed: Removed marker icon image.");
+          }
+          if (await currentMap.style.styleSourceExists(_geojsonSourceId)) {
+            await currentMap.style.removeStyleSource(_geojsonSourceId);
+            print("Disposed: Removed GeoJSON source.");
+          }
+        } catch (e) {
+          print("Error removing style elements during dispose: $e");
+        }
+      })();
     }
 
     // Safely dispose of the map instance
@@ -1399,9 +1390,9 @@ class _MapScreenState extends State<MapScreen> {
             onRotateRight: _rotateRight,
             onIncreasePitch: _increasePitch,
             onDecreasePitch: _decreasePitch,
-            onPreviousMarker: _goToPreviousMarker,
-            onNextMarker: _goToNextMarker,
-            canNavigateMarkers: _complaintCoordinates.isNotEmpty,
+            onPreviousMarker: _goToPreviousMarker, // Method still exists but button will be disabled
+            onNextMarker: _goToNextMarker,       // Method still exists but button will be disabled
+            canNavigateMarkers: false, // Disable marker navigation controls with clustering
             bottomPadding: _isBottomSheetVisible 
                 ? 200.0 // Match carousel container height (180 + padding)
                 : 0.0,
