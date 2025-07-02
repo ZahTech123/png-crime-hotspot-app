@@ -150,7 +150,7 @@ class _MapScreenState extends State<MapScreen> with PerformanceAware {
   }
 
   /// Apply processed markers to the map
-  void _applyProcessedMarkers(MarkerProcessingResult result, List<Complaint> complaints) {
+  void _applyProcessedMarkers(MarkerProcessingResult result, List<Complaint> complaints) async {
     // Update map state with processed data
     _mapNotifier.setComplaints(complaints);
     
