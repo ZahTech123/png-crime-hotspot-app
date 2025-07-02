@@ -612,26 +612,48 @@ class MapboxService {
         );
       }
 
+      // Define base padding values
+      const double basePadding = 80.0; // Increased base padding for better centering
+      double topP = basePadding;
+      double leftP = basePadding;
+      double rightP = basePadding;
+      double bottomP = basePadding;
+
+      // If the bottom sheet is visible, increase bottom padding significantly
+      // The typical bottom sheet height is 200.0 as seen in MapControls and MapScreen
+      if (isBottomSheetVisible) {
+        bottomP += 200.0;
+      }
+
+      // Add a little extra padding for the app bar at the top, if context is available to derive it.
+      // For now, kToolbarHeight is a common value.
+      // This is already somewhat handled by screenBox's y_min calculation if context is provided.
+      // If context is null, screenBox is null, so this explicit padding adjustment helps.
+      if (context == null) { // Only add explicit app bar padding if we don't have screenBox from context
+          topP += kToolbarHeight; // Approximately 56.0 or 64.0
+      }
+
+
+      final newPadding = mapbox.MbxEdgeInsets(
+          top: topP, left: leftP, bottom: bottomP, right: rightP);
+
       mapbox.CameraOptions cameraOptions;
       if (screenBox != null) {
+        // When screenBox is available, it already accounts for MediaQuery paddings (like status bar)
+        // and the explicit appBarHeight and bottomSheetHeight.
+        // The `newPadding` here will be applied *within* this screenBox.
         cameraOptions = await _mapboxMap!.cameraForCoordinatesCameraOptions(
           points,
-          mapbox.CameraOptions(
-            padding: mapbox.MbxEdgeInsets(top: 40.0, left: 40.0, bottom: 40.0, right: 40.0),
-            bearing: 0.0,
-            pitch: 0.0,
-          ),
+          mapbox.CameraOptions(padding: newPadding, bearing: 0.0, pitch: 0.0),
           screenBox,
         );
       } else {
+        // When screenBox is not available (context is null), we use the fallback large ScreenBox.
+        // The newPadding should effectively define the usable area.
         cameraOptions = await _mapboxMap!.cameraForCoordinatesCameraOptions(
           points,
-          mapbox.CameraOptions(
-            padding: mapbox.MbxEdgeInsets(top: 40.0, left: 40.0, bottom: 40.0, right: 40.0),
-            bearing: 0.0,
-            pitch: 0.0,
-          ),
-          mapbox.ScreenBox(
+          mapbox.CameraOptions(padding: newPadding, bearing: 0.0, pitch: 0.0),
+          mapbox.ScreenBox( // Default large screen box if context not available
             min: mapbox.ScreenCoordinate(x: 0, y: 0),
             max: mapbox.ScreenCoordinate(x: 1000, y: 1000),
           ),
