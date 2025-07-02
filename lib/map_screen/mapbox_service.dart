@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mapbox;
 import '../models.dart';
+import '../utils/background_processor.dart' as bg_processor;
 
 /// Service class to handle all Mapbox SDK interactions
 class MapboxService {
@@ -11,6 +12,7 @@ class MapboxService {
   mapbox.PointAnnotationManager? _pointAnnotationManager;
   bool _isDisposed = false;
   Timer? _debounceTimer;
+  Uint8List? _markerImageData; // Cached marker image data
 
   // Constants
   static const double _zoomIncrement = 1.0;
@@ -141,9 +143,8 @@ class MapboxService {
     }
 
     try {
-      // Load marker image
-      final ByteData bytes = await rootBundle.load('assets/map-point.png');
-      final Uint8List imageData = bytes.buffer.asUint8List();
+      // Get (or load if not cached) marker image
+      final Uint8List imageData = await _getMarkerImage();
 
       // Create annotation manager if needed
       _pointAnnotationManager ??= await _mapboxMap!.annotations.createPointAnnotationManager();
@@ -217,6 +218,132 @@ class MapboxService {
     }
   }
 
+  /// Lazily loads and caches the marker image data.
+  Future<Uint8List> _getMarkerImage() async {
+    if (_markerImageData == null) {
+      final ByteData bytes = await rootBundle.load('assets/map-point.png');
+      _markerImageData = bytes.buffer.asUint8List();
+    }
+    return _markerImageData!;
+  }
+
+  /// Create markers from already processed data (e.g., from a background isolate)
+  Future<MarkerCreationResult> createMarkersFromProcessedData(
+      bg_processor.MarkerProcessingResult processedResult) async {
+    if (!isInitialized || processedResult.markerOptions.isEmpty) {
+      return MarkerCreationResult.empty();
+    }
+
+    try {
+      _pointAnnotationManager ??= await _mapboxMap!.annotations.createPointAnnotationManager();
+      await _pointAnnotationManager!.deleteAll();
+
+      final List<mapbox.PointAnnotationOptions> options = [];
+      final List<mapbox.Position> coordinates = [];
+      // Temporary list to hold complaint IDs in the same order as options
+      final List<String> orderedComplaintIds = [];
+
+      for (final markerOpt in processedResult.markerOptions) {
+        final position = mapbox.Position(markerOpt.position.longitude, markerOpt.position.latitude);
+        options.add(mapbox.PointAnnotationOptions(
+          geometry: mapbox.Point(coordinates: position),
+          image: markerOpt.imageData, // Image data is already part of MarkerOption
+          iconSize: markerOpt.iconSize,
+        ));
+        coordinates.add(position);
+        orderedComplaintIds.add(markerOpt.complaintId);
+      }
+
+      if (options.isEmpty) {
+        return MarkerCreationResult.empty();
+      }
+
+      final List<mapbox.PointAnnotation?> createdAnnotationsNullable =
+          await _pointAnnotationManager!.createMulti(options);
+      final List<mapbox.PointAnnotation> createdAnnotations =
+          createdAnnotationsNullable.whereType<mapbox.PointAnnotation>().toList();
+
+      final Map<String, String> annotationIdToComplaintId = {};
+      // Assuming the order of createdAnnotations matches the order of options
+      // and thus orderedComplaintIds.
+      // The PointAnnotationManager.createMulti method preserves the order of the input options
+      // when returning the list of created annotations. Nulls are inserted for options that failed.
+
+      int currentNonNullAnnotationIndex = 0;
+      for (int i = 0; i < createdAnnotationsNullable.length; i++) {
+        final annotation = createdAnnotationsNullable[i];
+        if (annotation != null) {
+          // Ensure we don't go out of bounds for orderedComplaintIds if some creations failed
+          // and resulted in fewer non-null annotations than options.
+          // However, this specific loop structure implies createdAnnotations is already filtered.
+          // Let's adjust to iterate based on createdAnnotations and map back.
+
+          // The createdAnnotations list contains only non-null annotations.
+          // We need to map its elements back to the original `options` list to get the correct complaintId.
+          // This is tricky if `createMulti` doesn't guarantee an ID or some way to map back if some fail.
+          // Let's assume for now that the `createdAnnotations` list corresponds sequentially
+          // to the successful creations from the `options` list.
+          // A robust way would be if `createMulti` returned IDs or if options had temporary client-side IDs.
+
+          // Safest assumption: iterate through `createdAnnotations` (which are guaranteed non-null)
+          // and map them to `orderedComplaintIds` by their index in the `createdAnnotations` list,
+          // if `createMulti` guarantees that the returned list of non-null annotations
+          // directly corresponds to the successfully created options in order.
+          // The mapbox_maps_flutter documentation for `createMulti` states:
+          // "Creates multiple point annotations. Returns a list of created point annotations, in the same order as the options."
+          // "If an option fails to create, the corresponding item in the returned list will be null."
+
+          // So, we need to align `createdAnnotations` (non-null) with `orderedComplaintIds`
+          // by skipping nulls in `createdAnnotationsNullable`.
+          if (currentNonNullAnnotationIndex < orderedComplaintIds.length) {
+             // The current non-null annotation `annotation` corresponds to `orderedComplaintIds[i]`
+             // if we carefully map the original index `i` from `createdAnnotationsNullable`
+             // to the `orderedComplaintIds` list.
+
+             // Let's refine the mapping:
+             // The `annotation` object (from `createdAnnotations`) is an element that was successfully created.
+             // We need to find which `MarkerOption` it corresponds to.
+             // The `processedResult.complaintMapping` is `Map<String, String> complaintMapping`
+             // which was `complaintMapping['marker_$i'] = complaint.id;`
+             // This mapping is not directly useful here as annotation IDs are generated by Mapbox.
+
+             // The `orderedComplaintIds` list was built in the same order as `options`.
+             // If `createdAnnotations[j]` is the j-th non-null annotation, it corresponds to the
+             // j-th `MarkerOption` that successfully created an annotation.
+             // We need to find the original index of this successful option.
+
+             // Simpler approach: iterate createdAnnotations and use its index if the order is preserved for *successful* creations.
+             // If `createdAnnotations` is `[annotA, annotB]` and options were `[optA_succ, optB_fail, optC_succ]`,
+             // then `annotA` is from `optA_succ` and `annotB` from `optC_succ`.
+             // The `orderedComplaintIds` are `[id_A, id_B_fail, id_C]`.
+             // This means we need to iterate `createdAnnotationsNullable` and use its index `i` for `orderedComplaintIds[i]`.
+          }
+        }
+      }
+      // Corrected mapping logic:
+      currentNonNullAnnotationIndex = 0; // Index for the `createdAnnotations` list (non-null ones)
+      for(int originalOptionIndex = 0; originalOptionIndex < createdAnnotationsNullable.length; originalOptionIndex++) {
+        final mapbox.PointAnnotation? annotation = createdAnnotationsNullable[originalOptionIndex];
+        if (annotation != null) {
+          // This annotation was successfully created from options[originalOptionIndex]
+          // And its corresponding complaintId is orderedComplaintIds[originalOptionIndex]
+          annotationIdToComplaintId[annotation.id] = orderedComplaintIds[originalOptionIndex];
+          currentNonNullAnnotationIndex++;
+        }
+      }
+
+
+      return MarkerCreationResult(
+        coordinates: coordinates, // These are all potential coordinates
+        annotations: createdAnnotations, // These are only successfully created annotations
+        annotationMapping: annotationIdToComplaintId,
+      );
+    } catch (e) {
+      // Log error
+      return MarkerCreationResult.empty();
+    }
+  }
+
   /// Add click listener for markers
   void addMarkerClickListener(Function(mapbox.PointAnnotation) onTap) {
     if (_pointAnnotationManager == null) return;
@@ -240,30 +367,53 @@ class MapboxService {
     if (!forceUpdate && (newSize - currentSize).abs() < 0.1) return;
 
     try {
-      final updatedAnnotations = <mapbox.PointAnnotation>[];
+      final List<mapbox.PointAnnotation> annotationsToUpdate = [];
       
       for (var annotation in annotations) {
-        if ((annotation.iconSize ?? _initialIconSize - newSize).abs() > 0.05) {
-          updatedAnnotations.add(mapbox.PointAnnotation(
+        // Check if iconSize is null or significantly different from newSize
+        // Also ensure we only update if the newSize is actually different.
+        final currentIconSize = annotation.iconSize ?? _initialIconSize;
+        if ((currentIconSize - newSize).abs() > 0.05) {
+          // Create a new annotation object with the updated size.
+          // Important: The manager updates annotations based on their ID.
+          // We need to provide the full annotation object, not just the ID and size.
+          annotationsToUpdate.add(mapbox.PointAnnotation(
             id: annotation.id,
-            geometry: annotation.geometry,
-            image: annotation.image,
-            iconSize: newSize,
+            geometry: annotation.geometry, // Keep existing geometry
+            image: annotation.image,       // Keep existing image
+            iconSize: newSize,             // Apply new size
+            // Preserve other properties if they were set
             iconOffset: annotation.iconOffset,
             iconAnchor: annotation.iconAnchor,
             iconOpacity: annotation.iconOpacity,
             iconColor: annotation.iconColor,
+            textField: annotation.textField,
+            textOffset: annotation.textOffset,
+            textAnchor: annotation.textAnchor,
+            textSize: annotation.textSize,
+            textMaxWidth: annotation.textMaxWidth,
+            textLetterSpacing: annotation.textLetterSpacing,
+            textLineHeight: annotation.textLineHeight,
+            textRadialOffset: annotation.textRadialOffset,
+            textTransform: annotation.textTransform,
+            textJustify: annotation.textJustify,
+            textColor: annotation.textColor,
+            textHaloColor: annotation.textHaloColor,
+            textHaloWidth: annotation.textHaloWidth,
+            textHaloBlur: annotation.textHaloBlur,
+            iconImageCrossfade: annotation.iconImageCrossfade,
+            iconRotate: annotation.iconRotate,
+            iconPitchAlignment: annotation.iconPitchAlignment,
+            iconRotationAlignment: annotation.iconRotationAlignment,
+            symbolSortKey: annotation.symbolSortKey,
+            draggable: annotation.draggable,
           ));
         }
       }
 
-      if (updatedAnnotations.isNotEmpty) {
-        for (int i = 0; i < updatedAnnotations.length; i++) {
-          await _pointAnnotationManager?.update(updatedAnnotations[i]);
-          if (i < updatedAnnotations.length - 1) {
-            await Future.delayed(const Duration(milliseconds: 5));
-          }
-        }
+      if (annotationsToUpdate.isNotEmpty) {
+        // Use batch update
+        await _pointAnnotationManager?.updateMulti(annotationsToUpdate);
       }
     } catch (e) {
       // Silently ignore annotation size update errors

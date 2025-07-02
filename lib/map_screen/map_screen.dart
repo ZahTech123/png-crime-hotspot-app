@@ -150,13 +150,52 @@ class _MapScreenState extends State<MapScreen> with PerformanceAware {
   }
 
   /// Apply processed markers to the map
-  void _applyProcessedMarkers(MarkerProcessingResult result, List<Complaint> complaints) {
-    // Update map state with processed data
+  void _applyProcessedMarkers(bg_processor.MarkerProcessingResult result, List<Complaint> complaints) async { // Added async
+    if (!mounted) return;
+
     _mapNotifier.setComplaints(complaints);
-    
-    // This would need to be coordinated with the MapboxService
-    // For now, fall back to standard processing
-    _mapController.loadComplaintDataAsync();
+    _mapNotifier.setLoadingComplaints(true); // Show loading indicator
+
+    try {
+      // Use the new MapboxService method to create markers from processed data
+      final markerCreationResult = await _mapboxService.createMarkersFromProcessedData(result);
+
+      if (!mounted) return;
+
+      if (markerCreationResult.isNotEmpty) {
+        _mapNotifier.setComplaintCoordinates(
+          coordinates: markerCreationResult.coordinates,
+          annotations: markerCreationResult.annotations,
+          annotationMapping: markerCreationResult.annotationMapping,
+        );
+
+        // Optionally, reset camera view to show all markers.
+        // Consider if this should be triggered by a state change in MapNotifier
+        // or if MapController should handle this.
+        // For now, let's call it directly for simplicity, but ensure context is available or handled.
+        if (mounted) { // Check mounted again before using context
+          // Giving null for context as MapScreen's context might not be ideal here.
+          // The resetCameraView in mapbox_service can handle null context,
+          // though it might be less accurate without screen dimensions.
+          // Alternatively, this logic could be moved to MapController or triggered via MapNotifier.
+          await _mapboxService.resetCameraView(markerCreationResult.coordinates, null,
+                                              isBottomSheetVisible: _mapNotifier.isBottomSheetVisible);
+        }
+
+      } else {
+        // Handle case where no markers were created from processed data
+        _mapNotifier.clearMarkers(); // Clear any existing markers
+        // Optionally, show a message or log this scenario
+      }
+    } catch (e) {
+      if (mounted) {
+        _mapNotifier.setError('Error applying processed markers: $e');
+      }
+    } finally {
+      if (mounted) {
+        _mapNotifier.setLoadingComplaints(false); // Hide loading indicator
+      }
+    }
   }
 
   /// Handle style loaded event
