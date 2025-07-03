@@ -24,6 +24,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
   final ControlSize controlSize;
   final bool maintainFixedSize;
   final bool enablePerformanceOptimizations;
+  final bool isDarkMode; // Added for theme awareness
 
   MapControls({
     super.key,
@@ -41,6 +42,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
     this.controlSize = ControlSize.normal, // Default to normal size
     this.maintainFixedSize = true, // Default to fixed size
     this.enablePerformanceOptimizations = true, // Keep performance optimizations
+    required this.isDarkMode, // Make isDarkMode required
   });
 
   @override
@@ -58,7 +60,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
                 onPressed: onResetView,
                 tooltip: 'Home View',
                 heroTag: 'home',
-                backgroundColor: Colors.white,
+                // backgroundColor is now determined in _buildControlButton
                 performanceProvider: performanceProvider,
               ),
             ),
@@ -75,7 +77,6 @@ class MapControls extends StatelessWidget with PerformanceAware {
                     onPressed: onZoomIn,
                     tooltip: 'Zoom In',
                     heroTag: 'zoom_in',
-                    backgroundColor: Colors.white,
                     performanceProvider: performanceProvider,
                   ),
                   const SizedBox(height: 8),
@@ -84,7 +85,6 @@ class MapControls extends StatelessWidget with PerformanceAware {
                     onPressed: onZoomOut,
                     tooltip: 'Zoom Out',
                     heroTag: 'zoom_out',
-                    backgroundColor: Colors.white,
                     performanceProvider: performanceProvider,
                   ),
                 ],
@@ -103,7 +103,6 @@ class MapControls extends StatelessWidget with PerformanceAware {
                     onPressed: onRotateLeft,
                     tooltip: 'Rotate Left',
                     heroTag: 'rotate_left',
-                    backgroundColor: Colors.white,
                     performanceProvider: performanceProvider,
                   ),
                   const SizedBox(height: 8),
@@ -112,7 +111,6 @@ class MapControls extends StatelessWidget with PerformanceAware {
                     onPressed: onRotateRight,
                     tooltip: 'Rotate Right',
                     heroTag: 'rotate_right',
-                    backgroundColor: Colors.white,
                     performanceProvider: performanceProvider,
                   ),
                 ],
@@ -131,7 +129,6 @@ class MapControls extends StatelessWidget with PerformanceAware {
                     onPressed: onIncreasePitch,
                     tooltip: 'Increase Pitch',
                     heroTag: 'pitch_up',
-                    backgroundColor: Colors.white,
                     performanceProvider: performanceProvider,
                   ),
                   const SizedBox(height: 8),
@@ -140,7 +137,6 @@ class MapControls extends StatelessWidget with PerformanceAware {
                     onPressed: onDecreasePitch,
                     tooltip: 'Decrease Pitch',
                     heroTag: 'pitch_down',
-                    backgroundColor: Colors.white,
                     performanceProvider: performanceProvider,
                   ),
                 ],
@@ -160,7 +156,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
                       onPressed: onPreviousMarker,
                       tooltip: 'Previous Marker',
                       heroTag: 'prev_marker',
-                      backgroundColor: Colors.blue,
+                      isNavigationControl: true, // Differentiate navigation controls for styling
                       performanceProvider: performanceProvider,
                     ),
                     const SizedBox(height: 8),
@@ -169,7 +165,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
                       onPressed: onNextMarker,
                       tooltip: 'Next Marker',
                       heroTag: 'next_marker',
-                      backgroundColor: Colors.blue,
+                      isNavigationControl: true, // Differentiate navigation controls for styling
                       performanceProvider: performanceProvider,
                     ),
                   ],
@@ -188,7 +184,8 @@ class MapControls extends StatelessWidget with PerformanceAware {
     required VoidCallback onPressed,
     required String tooltip,
     required String heroTag,
-    required Color backgroundColor,
+    // required Color backgroundColor, // Removed, will be determined by isDarkMode
+    bool isNavigationControl = false, // Added to style navigation buttons differently
     required PerformanceProvider performanceProvider,
   }) {
     // Performance optimizations (non-visual)
@@ -204,6 +201,18 @@ class MapControls extends StatelessWidget with PerformanceAware {
     
     final double iconSize = _getIconSize();
     final double elevation = _getElevation(performanceProvider);
+
+    // Determine colors based on isDarkMode and control type
+    final Color fabBackgroundColor;
+    final Color fabForegroundColor;
+
+    if (isDarkMode) {
+      fabBackgroundColor = isNavigationControl ? Colors.blueGrey[700]! : Colors.grey[800]!;
+      fabForegroundColor = Colors.white;
+    } else {
+      fabBackgroundColor = isNavigationControl ? Colors.blue : Colors.white;
+      fabForegroundColor = isNavigationControl ? Colors.white : Colors.black87;
+    }
     
     return AnimatedContainer(
       duration: useAnimations ? const Duration(milliseconds: 200) : Duration.zero,
@@ -218,8 +227,8 @@ class MapControls extends StatelessWidget with PerformanceAware {
           }
         },
         tooltip: tooltip,
-        backgroundColor: backgroundColor,
-        foregroundColor: backgroundColor == Colors.blue ? Colors.white : Colors.black87,
+        backgroundColor: fabBackgroundColor,
+        foregroundColor: fabForegroundColor,
         mini: isMiniFAB,
         elevation: elevation,
         child: Icon(

@@ -15,6 +15,7 @@ class MapState {
   final double currentZoom;
   final List<mapbox.PointAnnotation> currentAnnotations;
   final Map<String, String> annotationIdToComplaintId;
+  final bool isDarkMode; // Added for theme switching
 
   const MapState({
     this.complaints = const [],
@@ -28,6 +29,7 @@ class MapState {
     this.currentZoom = 12.0,
     this.currentAnnotations = const [],
     this.annotationIdToComplaintId = const {},
+    this.isDarkMode = false, // Default to light mode
   });
 
   MapState copyWith({
@@ -42,6 +44,7 @@ class MapState {
     double? currentZoom,
     List<mapbox.PointAnnotation>? currentAnnotations,
     Map<String, String>? annotationIdToComplaintId,
+    bool? isDarkMode, // Added for theme switching
   }) {
     return MapState(
       complaints: complaints ?? this.complaints,
@@ -55,6 +58,7 @@ class MapState {
       currentZoom: currentZoom ?? this.currentZoom,
       currentAnnotations: currentAnnotations ?? this.currentAnnotations,
       annotationIdToComplaintId: annotationIdToComplaintId ?? this.annotationIdToComplaintId,
+      isDarkMode: isDarkMode ?? this.isDarkMode, // Added for theme switching
     );
   }
 
@@ -101,6 +105,7 @@ class MapNotifier extends ChangeNotifier {
   double get currentZoom => _state.currentZoom;
   List<mapbox.PointAnnotation> get currentAnnotations => _state.currentAnnotations;
   Map<String, String> get annotationIdToComplaintId => _state.annotationIdToComplaintId;
+  bool get isDarkMode => _state.isDarkMode; // Getter for isDarkMode
 
   /// Update the entire state
   void updateState(MapState newState) {
@@ -194,6 +199,12 @@ class MapNotifier extends ChangeNotifier {
   /// Clear all markers and reset related state
   void clearMarkers() {
     _state = _state.clearMarkers();
+    notifyListeners();
+  }
+
+  /// Toggle dark mode
+  void toggleDarkMode() {
+    _state = _state.copyWith(isDarkMode: !_state.isDarkMode);
     notifyListeners();
   }
 

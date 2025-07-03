@@ -1045,8 +1045,8 @@ class MapboxService {
       }
       
       // Additional zoom adjustment to account for increased padding
-      adjustedZoom = adjustedZoom - 0.5;
-      reason += ', -0.5 for padding compensation';
+      adjustedZoom = adjustedZoom - 0.75; // Increased padding compensation
+      reason += ', -0.75 for padding compensation';
       
       // Ensure we stay within reasonable bounds
       if (adjustedZoom < 6.0) {

@@ -81,18 +81,62 @@ class NCDCApp extends StatelessWidget {
           },
         ),
       ],
-      child: MaterialApp(
-        title: 'NCDC CCMS',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-        ),
-        home: AuthRedirect(supabaseClient: supabaseClient),
-        debugShowCheckedModeBanner: false, // Remove debug banner for cleaner look
-        // PHASE 1: Initialize memory pressure integration after app startup
-        builder: (context, child) {
-          return MemoryPressureIntegration(child: child!);
-        },
+      child: Builder( // Use Builder to get context for Theme
+        builder: (context) {
+          // Access PerformanceProvider if needed for theme decisions, though not directly used here
+          // final performanceProvider = Provider.of<PerformanceProvider>(context, listen: false);
+
+          // Define light and dark themes
+          final ThemeData lightTheme = ThemeData(
+            brightness: Brightness.light,
+            primarySwatch: Colors.blue,
+            visualDensity: VisualDensity.adaptivePlatformDensity,
+            // Add other light theme specific properties here
+          );
+
+          final ThemeData darkTheme = ThemeData(
+            brightness: Brightness.dark,
+            primarySwatch: Colors.blue, // Or a different swatch for dark mode
+            scaffoldBackgroundColor: Colors.grey[850], // Darker background
+            appBarTheme: AppBarTheme(
+              backgroundColor: Colors.grey[900], // Darker AppBar
+              elevation: 1, // Subtle elevation
+              titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w500),
+              iconTheme: IconThemeData(color: Colors.white),
+            ),
+            floatingActionButtonTheme: FloatingActionButtonThemeData(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+            cardColor: Colors.grey[800],
+            textTheme: TextTheme( // Ensure text is legible on dark backgrounds
+              bodyLarge: TextStyle(color: Colors.white70),
+              bodyMedium: TextStyle(color: Colors.white70),
+              titleLarge: TextStyle(color: Colors.white),
+              // Define other text styles as needed
+            ),
+            iconTheme: IconThemeData(color: Colors.white70), // Default icon color
+            // Add other dark theme specific properties here
+          );
+
+          // For this step, we'll manually toggle. Later, a ThemeProvider could manage this.
+          // For now, we assume MapNotifier is the source of truth for dark mode on MapScreen.
+          // If a global theme provider is introduced, this logic would change.
+
+          return MaterialApp(
+            title: 'NCDC CCMS',
+            theme: lightTheme, // Default theme
+            darkTheme: darkTheme, // Dark theme
+            // ThemeMode will be controlled by a global theme provider eventually.
+            // For now, MapScreen will handle its own theming based on MapNotifier.
+            // If we want MaterialApp to control the theme globally, we'd need a ThemeProvider here.
+            home: AuthRedirect(supabaseClient: supabaseClient),
+            debugShowCheckedModeBanner: false, // Remove debug banner for cleaner look
+            builder: (context, child) {
+              return MemoryPressureIntegration(child: child!);
+            },
+          );
+        }
       ),
     );
   }

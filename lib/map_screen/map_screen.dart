@@ -209,16 +209,36 @@ class _MapScreenState extends State<MapScreen> with PerformanceAware {
       return _buildErrorScreen('Mapbox Access Token is invalid or missing. Please provide a valid token.');
     }
 
-    final widget = PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (bool didPop, dynamic result) {
-        if (didPop) return;
-        _prepareForNavigation();
-        Navigator.of(context).pop();
-      },
-      child: Scaffold(
-        appBar: _buildAppBar(),
-        body: _buildMapBody(),
+    // Access MapNotifier here to determine the theme
+    final mapNotifier = Provider.of<MapNotifier>(context);
+    final currentMaterialAppTheme = Theme.of(context);
+
+    // Determine the theme data to apply based on isDarkMode
+    // This will effectively use the light or dark theme defined in MaterialApp
+    // by setting the brightness, and Flutter's theme system will pick up
+    // the corresponding component themes (like AppBarTheme, CardTheme, etc.)
+    // from what's defined in main.dart's MaterialApp.
+    // By changing the brightness, Flutter's Theme system should then use the
+    // corresponding theme (light or dark) defined in MaterialApp.
+    final effectiveTheme = currentMaterialAppTheme.copyWith(
+      brightness: mapNotifier.isDarkMode ? Brightness.dark : Brightness.light,
+      // Other specific overrides for MapScreen can go here if needed,
+      // but ideally, main.dart themes are comprehensive.
+    );
+
+    final widget = Theme(
+      data: effectiveTheme,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (bool didPop, dynamic result) {
+          if (didPop) return;
+          _prepareForNavigation();
+          Navigator.of(context).pop();
+        },
+        child: Scaffold(
+          appBar: _buildAppBar(), // AppBar will now use the theme from Theme widget
+          body: _buildMapBody(),
+        ),
       ),
     );
     
@@ -228,26 +248,47 @@ class _MapScreenState extends State<MapScreen> with PerformanceAware {
 
   /// Build the app bar with logo and title
   PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(
-            'assets/NCDC Logo.png',
-            height: 30,
-            errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+    // Consumer is still needed here if the AppBar's content (like the icon)
+    // needs to react to mapNotifier changes directly.
+    // However, the AppBar's theme (background, text style) will be inherited
+    // from the parent Theme widget.
+    return Consumer<MapNotifier>(
+      builder: (context, mapNotifier, child) {
+        // AppBar uses the ThemeData from the closest Theme widget in the tree.
+        return AppBar(
+          // Example: Explicitly setting colors if needed, though Theme should handle it.
+          // backgroundColor: mapNotifier.isDarkMode ? Colors.grey[900] : Colors.blue,
+          // foregroundColor: mapNotifier.isDarkMode ? Colors.white : null, // Or rely on AppBarTheme
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/NCDC Logo.png',
+                height: 30,
+                errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+              ),
+              const SizedBox(width: 8),
+              const Text('NCDC CCMS'),
+            ],
           ),
-          const SizedBox(width: 8),
-          const Text('NCDC CCMS'),
-        ],
-      ),
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
-        onPressed: () {
-          _prepareForNavigation();
-          Navigator.of(context).pop();
-        },
-      ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              _prepareForNavigation();
+              Navigator.of(context).pop();
+            },
+          ),
+          actions: [
+            IconButton(
+              icon: Icon(mapNotifier.isDarkMode ? Icons.light_mode : Icons.dark_mode),
+              tooltip: mapNotifier.isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+              onPressed: () {
+                mapNotifier.toggleDarkMode();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -268,7 +309,10 @@ class _MapScreenState extends State<MapScreen> with PerformanceAware {
               zoom: 16.0,
               bearing: 0.0,
             ),
-            styleUri: mapbox.MapboxStyles.STANDARD,
+            // Update styleUri based on dark mode
+            styleUri: context.watch<MapNotifier>().isDarkMode
+                        ? 'mapbox://styles/mapbox/navigation-night-v1'
+                        : mapbox.MapboxStyles.STANDARD,
             textureView: true,
           ),
 
@@ -290,6 +334,7 @@ class _MapScreenState extends State<MapScreen> with PerformanceAware {
                 controlSize: ControlSize.mini,
                 maintainFixedSize: true,
                 enablePerformanceOptimizations: true,
+                isDarkMode: mapNotifier.isDarkMode, // Pass isDarkMode state
               );
             },
           ),
