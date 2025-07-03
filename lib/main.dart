@@ -77,6 +77,8 @@ class NCDCApp extends StatelessWidget {
           primarySwatch: Colors.blue,
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
+        darkTheme: ThemeData.dark(),
+        themeMode: ThemeMode.system,
         home: AuthRedirect(supabaseClient: supabaseClient),
         debugShowCheckedModeBanner: false, // Remove debug banner for cleaner look
         // PHASE 1: Initialize memory pressure integration after app startup
