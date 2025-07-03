@@ -6,6 +6,7 @@ import 'package:ncdc_ccms_app/models.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart'; // Import for rootBundle
 import 'dart:async'; // Import for Timer
+import '../utils/logger.dart'; // Import AppLogger
 
 // Import the extracted widget
 import 'package:ncdc_ccms_app/map_screen/widgets/safe_mapbox_widget.dart';
@@ -14,6 +15,8 @@ import 'package:ncdc_ccms_app/map_screen/widgets/safe_mapbox_widget.dart';
 import 'package:ncdc_ccms_app/map_screen/widgets/persistent_bottom_sheet.dart';
 // Import the new controls widget
 import 'package:ncdc_ccms_app/map_screen/widgets/map_controls.dart';
+// Import the optimized icon service
+import 'package:ncdc_ccms_app/map_screen/map_icon_service.dart';
 
 // ======== SAFE MAPBOX WIDGET WRAPPER ========
 // This wrapper ensures proper lifecycle management for MapboxMap
@@ -386,9 +389,18 @@ class _MapScreenState extends State<MapScreen> {
 
 
     try {
-      // --- Load the marker image from assets ---
-      final ByteData bytes = await rootBundle.load('assets/map-point.png');
-      final Uint8List imageData = bytes.buffer.asUint8List();
+      // --- Get optimized icon data from cache ---
+      Uint8List imageData;
+      try {
+        await MapIconService.instance.initialize();
+        imageData = MapIconService.instance.originalIcon;
+        AppLogger.d('[MapScreen] Using cached icon data');
+      } catch (e) {
+        // Fallback to asset loading
+        AppLogger.w('[MapScreen] Icon service unavailable, using fallback: $e');
+        final ByteData bytes = await rootBundle.load('assets/map-point.png');
+        imageData = bytes.buffer.asUint8List();
+      }
       // -----------------------------------------
 
       // Check again before proceeding with async annotation manager creation
@@ -420,8 +432,8 @@ class _MapScreenState extends State<MapScreen> {
       for (int i = 0; i < _complaints.length; i++) {
         final complaint = _complaints[i];
         
-        final double? latitude = complaint.latitude;
-        final double? longitude = complaint.longitude;
+        final double latitude = complaint.latitude;
+        final double longitude = complaint.longitude;
         final String complaintId = complaint.id;
 
         // Only create an option if lat, lon, and ID are valid
@@ -1153,9 +1165,9 @@ class _MapScreenState extends State<MapScreen> {
       try {
         // Dispose immediately without dangerous delays
         map.dispose();
-        print("MapScreen: Map successfully disposed");
+        AppLogger.i("MapScreen: Map successfully disposed");
       } catch (e) {
-        print("MapScreen: Error during disposal: $e");
+        AppLogger.e("MapScreen: Error during disposal", e);
         // Don't rethrow - we want to continue with disposal process
       }
     }

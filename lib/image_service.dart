@@ -70,17 +70,6 @@ class ImageService {
     }
   }
 
-  /// PHASE 1: Enhanced cache management with memory awareness
-  void _manageCacheMemory() {
-    if (_disposed) return;
-
-    // Remove entries if we exceed size or count limits
-    while ((_imageCache.length > _maxCacheItems || _currentCacheSizeBytes > _maxCacheSizeBytes) 
-           && _imageCache.isNotEmpty) {
-      _evictLeastRecentlyUsed();
-    }
-  }
-
   /// PHASE 1: LRU eviction strategy
   void _evictLeastRecentlyUsed() {
     if (_imageCache.isEmpty) return;

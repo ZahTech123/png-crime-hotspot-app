@@ -17,6 +17,11 @@
         <!-- Remove Mapbox Access Token meta-data (trying gradle.properties) -->
         <!-- <meta-data android:name="MAPBOX_ACCESS_TOKEN" android:value="pk.eyJ1Ijoiam9obnNraXBvbGkiLCJhIjoiY201c3BzcDYxMG9neDJscTZqeXQ4MGk4YSJ9.afrO8Lq1P6mIUbSyQ6VCsQ"/> -->
 
+        <!-- DISABLE IMPELLER: Use Skia rendering engine instead for better device compatibility -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
+
         <!-- Add these meta-data tags INSIDE application tag -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"

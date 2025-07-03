@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/performance_provider.dart';
 
+/// Control size options independent of performance mode
+enum ControlSize { mini, normal, large }
+
 /// Map controls widget with floating action buttons for camera and marker navigation
+/// Controls maintain consistent size regardless of performance conditions
 class MapControls extends StatelessWidget with PerformanceAware {
   final VoidCallback onResetView;
   final VoidCallback onZoomIn;
@@ -15,6 +19,11 @@ class MapControls extends StatelessWidget with PerformanceAware {
   final VoidCallback onNextMarker;
   final bool canNavigateMarkers;
   final double bottomPadding; // Added padding for bottom sheet
+  
+  // New size management properties
+  final ControlSize controlSize;
+  final bool maintainFixedSize;
+  final bool enablePerformanceOptimizations;
 
   MapControls({
     super.key,
@@ -29,6 +38,9 @@ class MapControls extends StatelessWidget with PerformanceAware {
     required this.onNextMarker,
     required this.canNavigateMarkers,
     this.bottomPadding = 0.0,
+    this.controlSize = ControlSize.normal, // Default to normal size
+    this.maintainFixedSize = true, // Default to fixed size
+    this.enablePerformanceOptimizations = true, // Keep performance optimizations
   });
 
   @override
@@ -41,7 +53,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
             Positioned(
               left: 16,
               bottom: 140 + bottomPadding, // Account for bottom sheet
-              child: _buildPerformanceAwareButton(
+              child: _buildControlButton(
                 icon: Icons.home,
                 onPressed: onResetView,
                 tooltip: 'Home View',
@@ -58,7 +70,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildPerformanceAwareButton(
+                  _buildControlButton(
                     icon: Icons.add,
                     onPressed: onZoomIn,
                     tooltip: 'Zoom In',
@@ -67,7 +79,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
                     performanceProvider: performanceProvider,
                   ),
                   const SizedBox(height: 8),
-                  _buildPerformanceAwareButton(
+                  _buildControlButton(
                     icon: Icons.remove,
                     onPressed: onZoomOut,
                     tooltip: 'Zoom Out',
@@ -86,7 +98,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildPerformanceAwareButton(
+                  _buildControlButton(
                     icon: Icons.rotate_left,
                     onPressed: onRotateLeft,
                     tooltip: 'Rotate Left',
@@ -95,7 +107,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
                     performanceProvider: performanceProvider,
                   ),
                   const SizedBox(height: 8),
-                  _buildPerformanceAwareButton(
+                  _buildControlButton(
                     icon: Icons.rotate_right,
                     onPressed: onRotateRight,
                     tooltip: 'Rotate Right',
@@ -114,7 +126,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildPerformanceAwareButton(
+                  _buildControlButton(
                     icon: Icons.keyboard_arrow_up,
                     onPressed: onIncreasePitch,
                     tooltip: 'Increase Pitch',
@@ -123,7 +135,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
                     performanceProvider: performanceProvider,
                   ),
                   const SizedBox(height: 8),
-                  _buildPerformanceAwareButton(
+                  _buildControlButton(
                     icon: Icons.keyboard_arrow_down,
                     onPressed: onDecreasePitch,
                     tooltip: 'Decrease Pitch',
@@ -143,7 +155,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildPerformanceAwareButton(
+                    _buildControlButton(
                       icon: Icons.skip_previous,
                       onPressed: onPreviousMarker,
                       tooltip: 'Previous Marker',
@@ -152,7 +164,7 @@ class MapControls extends StatelessWidget with PerformanceAware {
                       performanceProvider: performanceProvider,
                     ),
                     const SizedBox(height: 8),
-                    _buildPerformanceAwareButton(
+                    _buildControlButton(
                       icon: Icons.skip_next,
                       onPressed: onNextMarker,
                       tooltip: 'Next Marker',
@@ -170,8 +182,8 @@ class MapControls extends StatelessWidget with PerformanceAware {
     );
   }
 
-  /// Build a performance-aware floating action button
-  Widget _buildPerformanceAwareButton({
+  /// Build a control button with independent size management and performance optimizations
+  Widget _buildControlButton({
     required IconData icon,
     required VoidCallback onPressed,
     required String tooltip,
@@ -179,16 +191,27 @@ class MapControls extends StatelessWidget with PerformanceAware {
     required Color backgroundColor,
     required PerformanceProvider performanceProvider,
   }) {
-    // Disable animations completely in high-performance mode
-    final useAnimations = !performanceProvider.useHighPerformanceMode;
+    // Performance optimizations (non-visual)
+    final bool useAnimations = enablePerformanceOptimizations ? 
+        !performanceProvider.useHighPerformanceMode : true;
+    final bool shouldDebounce = enablePerformanceOptimizations && 
+        performanceProvider.useHighPerformanceMode;
+    
+    // Size management - independent of performance mode
+    final bool isMiniFAB = maintainFixedSize ? 
+        (controlSize == ControlSize.mini) : 
+        performanceProvider.useHighPerformanceMode; // Fallback to old behavior if not maintaining fixed size
+    
+    final double iconSize = _getIconSize();
+    final double elevation = _getElevation(performanceProvider);
     
     return AnimatedContainer(
       duration: useAnimations ? const Duration(milliseconds: 200) : Duration.zero,
       child: FloatingActionButton(
         heroTag: heroTag,
         onPressed: () {
-          // Debounce button presses in performance mode
-          if (performanceProvider.useHighPerformanceMode) {
+          // Debounce button presses for performance optimization
+          if (shouldDebounce) {
             Future.delayed(const Duration(milliseconds: 50), onPressed);
           } else {
             onPressed();
@@ -197,13 +220,43 @@ class MapControls extends StatelessWidget with PerformanceAware {
         tooltip: tooltip,
         backgroundColor: backgroundColor,
         foregroundColor: backgroundColor == Colors.blue ? Colors.white : Colors.black87,
-        mini: performanceProvider.useHighPerformanceMode, // Use mini buttons in performance mode
-        elevation: performanceProvider.useHighPerformanceMode ? 2.0 : 6.0, // Reduce elevation for performance
+        mini: isMiniFAB,
+        elevation: elevation,
         child: Icon(
           icon,
-          size: performanceProvider.useHighPerformanceMode ? 20.0 : 24.0,
+          size: iconSize,
         ),
       ),
     );
+  }
+
+  /// Get icon size based on control size setting
+  double _getIconSize() {
+    switch (controlSize) {
+      case ControlSize.mini:
+        return 20.0;
+      case ControlSize.normal:
+        return 24.0;
+      case ControlSize.large:
+        return 28.0;
+    }
+  }
+
+  /// Get elevation with optional performance optimization
+  double _getElevation(PerformanceProvider performanceProvider) {
+    if (enablePerformanceOptimizations && performanceProvider.useHighPerformanceMode) {
+      // Reduce elevation for better GPU performance
+      return 2.0;
+    }
+    
+    // Standard elevation based on control size
+    switch (controlSize) {
+      case ControlSize.mini:
+        return 4.0;
+      case ControlSize.normal:
+        return 6.0;
+      case ControlSize.large:
+        return 8.0;
+    }
   }
 } 

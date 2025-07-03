@@ -8,6 +8,8 @@ import 'complaint_provider.dart'; // Import ComplaintProvider
 import 'complaint_service.dart'; // Import ComplaintService
 import 'image_service.dart'; // Import ImageService
 import 'providers/performance_provider.dart'; // Import PerformanceProvider
+import 'utils/logger.dart'; // Import AppLogger
+import 'map_screen/map_icon_service.dart'; // Import MapIconService
 
 // TODO: Replace with your actual Supabase URL and Anon Key
 const String supabaseUrl = 'https://mdyzvdvbodwryycqlptn.supabase.co';
@@ -35,6 +37,14 @@ Future<void> main() async {
 
   // Get the Supabase client instance *after* initialization
   final supabaseClient = Supabase.instance.client;
+
+  // Initialize MapIconService early for optimized map performance
+  try {
+    await MapIconService.instance.initialize();
+    AppLogger.i('[Main] MapIconService initialized successfully');
+  } catch (e) {
+    AppLogger.w('[Main] MapIconService initialization failed, will use fallback: $e');
+  }
 
   runApp(NCDCApp(supabaseClient: supabaseClient));
 }
@@ -133,19 +143,31 @@ class _MemoryPressureIntegrationState extends State<MemoryPressureIntegration> {
           
           // Log the cache info after clearing for monitoring
           final cacheInfo = imageService.getCacheInfo();
-          print('[MemoryPressureIntegration] Cache cleared under pressure. Remaining items: ${cacheInfo['cacheItems']}, size: ${cacheInfo['cacheSizeKB']}KB');
+          AppLogger.i('[MemoryPressureIntegration] Cache cleared under pressure. Remaining items: ${cacheInfo['cacheItems']}, size: ${cacheInfo['cacheSizeKB']}KB');
           
         } catch (e) {
-          print('[MemoryPressureIntegration] Error clearing image cache under pressure: $e');
+          AppLogger.e('[MemoryPressureIntegration] Error clearing image cache under pressure', e);
         }
       });
       
-      print('[MemoryPressureIntegration] Memory pressure integration initialized successfully');
+      AppLogger.i('[MemoryPressureIntegration] Memory pressure integration initialized successfully');
       
     } catch (e) {
-      print('[MemoryPressureIntegration] Error initializing memory pressure integration: $e');
+      AppLogger.e('[MemoryPressureIntegration] Error initializing memory pressure integration', e);
       // Don't crash the app if integration fails
     }
+  }
+
+  @override
+  void dispose() {
+    // Dispose of MapIconService when app shuts down
+    try {
+      MapIconService.instance.dispose();
+      AppLogger.i('[MemoryPressureIntegration] MapIconService disposed');
+    } catch (e) {
+      AppLogger.w('[MemoryPressureIntegration] Error disposing MapIconService: $e');
+    }
+    super.dispose();
   }
 
   @override

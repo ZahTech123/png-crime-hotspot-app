@@ -8,6 +8,7 @@ import '../providers/performance_provider.dart';
 import '../utils/background_processor.dart';
 import '../utils/logger.dart';
 import 'map_controller.dart';
+import 'map_icon_service.dart';
 import 'map_state.dart';
 import 'mapbox_service.dart';
 import 'widgets/map_controls.dart';
@@ -56,6 +57,9 @@ class _MapScreenState extends State<MapScreen> with PerformanceAware {
 
   @override
   void dispose() {
+    // Clear context reference to prevent memory leaks
+    _mapController.clearContext();
+    
     _mapController.dispose();
     _mapNotifier.dispose();
     super.dispose();
@@ -72,6 +76,9 @@ class _MapScreenState extends State<MapScreen> with PerformanceAware {
     try {
       // Set map loading state
       performanceProvider.setMapLoading(true);
+      
+      // Update controller with current context for camera operations
+      _mapController.updateContext(context);
       
       // Only do immediate, non-blocking map setup here
       await _mapController.initializeMapSync(mapboxMap);
@@ -116,9 +123,18 @@ class _MapScreenState extends State<MapScreen> with PerformanceAware {
           
           AppLogger.d('[MapScreen] Processing ${complaints.length} markers in background');
           
-          // Load marker image data
-          final imageData = await rootBundle.load('assets/map-point.png');
-          final imageBytes = imageData.buffer.asUint8List();
+          // Get optimized icon data from cache
+          Uint8List imageBytes;
+          try {
+            await MapIconService.instance.initialize();
+            imageBytes = MapIconService.instance.originalIcon;
+            AppLogger.d('[MapScreen] Using cached icon data for background processing');
+          } catch (e) {
+            // Fallback to asset loading
+            AppLogger.w('[MapScreen] Icon service unavailable, using fallback: $e');
+            final imageData = await rootBundle.load('assets/map-point.png');
+            imageBytes = imageData.buffer.asUint8List();
+          }
           
           // Process markers in background
           final markerResult = await BackgroundProcessor.processMarkerData(
@@ -183,6 +199,9 @@ class _MapScreenState extends State<MapScreen> with PerformanceAware {
   @override
   Widget build(BuildContext context) {
     startBuildTiming(); // Start performance monitoring
+    
+    // Update controller context on every build to ensure it's always current
+    _mapController.updateContext(context);
     
     // Check token validity
     if (_mapboxAccessToken.isEmpty || !_mapboxAccessToken.startsWith('pk.')) {
@@ -268,6 +287,9 @@ class _MapScreenState extends State<MapScreen> with PerformanceAware {
                 onNextMarker: _mapController.goToNextMarker,
                 canNavigateMarkers: mapNotifier.complaintCoordinates.isNotEmpty,
                 bottomPadding: mapNotifier.isBottomSheetVisible ? 200.0 : 0.0,
+                controlSize: ControlSize.mini,
+                maintainFixedSize: true,
+                enablePerformanceOptimizations: true,
               );
             },
           ),

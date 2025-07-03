@@ -33,10 +33,6 @@ class PerformanceProvider with ChangeNotifier {
   DateTime? _lastMemoryPressureTime;
   Timer? _memoryMonitorTimer;
   final List<int> _memoryUsageHistory = []; // Track memory usage over time
-  static const int _memoryHistoryLimit = 10;
-  
-  // PHASE 1: Memory pressure thresholds
-  static const int _memoryPressureThresholdMB = 200; // Threshold for memory pressure detection
   // Note: Critical threshold reserved for future enhanced memory monitoring
   
   // Memory pressure callbacks
